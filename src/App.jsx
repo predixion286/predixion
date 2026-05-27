@@ -631,7 +631,10 @@ const AuthPage = ({ onAuth, initialMode = "login" }) => {
         const data = await sb.auth.signIn({ email: form.email, password: form.password });
         if (data.error || !data.access_token) { setError(data.error?.message || "Invalid email or password"); setLoading(false); return; }
         const userRow = await sb.select("users", `?email=eq.${encodeURIComponent(form.email)}`);
-        onAuth({ token: data.access_token, user: userRow[0] || { email: form.email, username: form.email.split("@")[0] } });
+        // Always use the username from the database, never fall back to email prefix
+        const userProfile = userRow?.[0];
+        if (!userProfile) { setError("Account not found — please register first."); setLoading(false); return; }
+        onAuth({ token: data.access_token, user: userProfile });
       }
     } catch (e) {
       setError("Connection error — check your internet and try again.");
@@ -1396,6 +1399,34 @@ const LiveFeed = () => {
 };
 
 // ============================================================
+// XI BUILDER LOADER — proper component wrapper (fixes hooks-in-switch bug)
+// ============================================================
+const XIBuilderLoader = ({ auth, groupId, type, onBack, onSave, onToast }) => {
+  const [group, setGroup] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    sb.select("groups", `?id=eq.${groupId}`)
+      .then(rows => setGroup(rows?.[0] || null))
+      .catch(() => onToast("Failed to load group", true))
+      .finally(() => setLoading(false));
+  }, [groupId]);
+
+  if (loading) return <Spinner full />;
+  if (!group) return (
+    <div className="page">
+      <div className="empty-state">
+        <div className="empty-icon">⚠️</div>
+        <div className="empty-text">Group not found</div>
+        <button className="btn btn-ghost btn-sm" onClick={onBack}>← Go Back</button>
+      </div>
+    </div>
+  );
+
+  return <XIBuilder auth={auth} group={group} type={type} onBack={onBack} onSave={onSave} onToast={onToast} />;
+};
+
+// ============================================================
 // APP SHELL
 // ============================================================
 export default function App() {
@@ -1455,14 +1486,8 @@ export default function App() {
       case "dashboard": return <Dashboard auth={auth} onNav={nav} onToast={onToast} />;
       case "groups": return <GroupsPage auth={auth} initialModal={pageParams.modal} onToast={onToast} onNav={nav} />;
       case "group-detail": return <GroupDetail auth={auth} groupId={pageParams.groupId} onNav={nav} onToast={onToast} />;
-      case "xi-builder": {
-        const [grpState, setGrpState] = useState(null);
-        useEffect(() => {
-          sb.select("groups",`?id=eq.${pageParams.groupId}`).then(rows => setGrpState(rows?.[0]||null));
-        },[pageParams.groupId]);
-        if (!grpState) return <Spinner full />;
-        return <XIBuilder auth={auth} group={grpState} type={pageParams.type||"goals"} onBack={() => nav("group-detail",{groupId:pageParams.groupId})} onSave={() => nav("group-detail",{groupId:pageParams.groupId})} onToast={onToast} />;
-      }
+      case "xi-builder":
+        return <XIBuilderLoader auth={auth} groupId={pageParams.groupId} type={pageParams.type||"goals"} onBack={() => nav("group-detail",{groupId:pageParams.groupId})} onSave={() => nav("group-detail",{groupId:pageParams.groupId})} onToast={onToast} />;
       case "leaderboard": return <Leaderboard auth={auth} />;
       case "feed": return <LiveFeed />;
       default: return <Dashboard auth={auth} onNav={nav} onToast={onToast} />;

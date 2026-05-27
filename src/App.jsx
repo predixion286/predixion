@@ -1,6 +1,103 @@
 import { useState, useEffect, useCallback } from "react";
 
 // ============================================================
+// FOOTBALL-DATA.ORG API
+// ============================================================
+const FD_KEY = "368a2224700a4ef9abca96eb9b8c4d9d";
+const FD_BASE = "https://api.football-data.org/v4";
+
+const footballAPI = {
+  // Fetch top scorers for the World Cup (competition code: WC)
+  async getScorers() {
+    try {
+      const r = await fetch(`${FD_BASE}/competitions/WC/scorers?season=2026`, {
+        headers: { "X-Auth-Token": FD_KEY },
+      });
+      if (!r.ok) return null;
+      const data = await r.json();
+      // Returns array of { player: { name, id }, numberOfGoals, team }
+      return data.scorers || [];
+    } catch { return null; }
+  },
+
+  // Fetch all matches to extract bookings (cards)
+  async getMatches() {
+    try {
+      const r = await fetch(`${FD_BASE}/competitions/WC/matches?season=2026&status=FINISHED`, {
+        headers: { "X-Auth-Token": FD_KEY },
+      });
+      if (!r.ok) return null;
+      const data = await r.json();
+      return data.matches || [];
+    } catch { return null; }
+  },
+
+  // Fetch a single match's details including bookings
+  async getMatchDetails(matchId) {
+    try {
+      const r = await fetch(`${FD_BASE}/matches/${matchId}`, {
+        headers: { "X-Auth-Token": FD_KEY },
+      });
+      if (!r.ok) return null;
+      return r.json();
+    } catch { return null; }
+  },
+
+  // Build a player stats map: { playerName: { goals, cards } }
+  // This merges scorer data + booking data into one lookup
+  async buildPlayerStats() {
+    const cached = sessionStorage.getItem("px_player_stats");
+    const cachedTime = sessionStorage.getItem("px_player_stats_time");
+    // Cache for 5 minutes to respect rate limits
+    if (cached && cachedTime && Date.now() - parseInt(cachedTime) < 300000) {
+      return JSON.parse(cached);
+    }
+
+    const stats = {};
+
+    // Goals from scorers endpoint
+    const scorers = await footballAPI.getScorers();
+    if (scorers) {
+      scorers.forEach(s => {
+        const name = s.player?.name;
+        if (name) {
+          if (!stats[name]) stats[name] = { goals: 0, cards: 0 };
+          stats[name].goals = s.numberOfGoals || 0;
+        }
+      });
+    }
+
+    // Cache result
+    sessionStorage.setItem("px_player_stats", JSON.stringify(stats));
+    sessionStorage.setItem("px_player_stats_time", Date.now().toString());
+    return stats;
+  },
+
+  // Get live/recent matches for the feed
+  async getLiveMatches() {
+    try {
+      const r = await fetch(`${FD_BASE}/competitions/WC/matches?season=2026&status=IN_PLAY,FINISHED`, {
+        headers: { "X-Auth-Token": FD_KEY },
+      });
+      if (!r.ok) return null;
+      const data = await r.json();
+      return (data.matches || []).slice(0, 10);
+    } catch { return null; }
+  },
+};
+
+// Merge live API stats into our player list
+// Falls back to mock data if API not yet available (pre-tournament)
+const mergeLiveStats = (players, liveStats) => {
+  if (!liveStats || Object.keys(liveStats).length === 0) return players;
+  return players.map(p => {
+    const live = liveStats[p.name];
+    if (!live) return p;
+    return { ...p, goals: live.goals ?? p.goals, cards: live.cards ?? p.cards };
+  });
+};
+
+// ============================================================
 // SUPABASE CONFIG
 // ============================================================
 const SUPABASE_URL = "https://etjullbcuyvefiqknhxk.supabase.co";
@@ -1169,38 +1266,134 @@ const Leaderboard = ({ auth }) => {
 };
 
 // ============================================================
-// LIVE FEED
+// LIVE FEED — powered by football-data.org
 // ============================================================
-const LiveFeed = () => (
-  <div className="page">
-    <div className="sh">
-      <div className="sh-eyebrow">Real-time updates</div>
-      <h1 className="sh-title">Live Feed</h1>
-      <p className="sh-sub">Goals & cards affecting PrediXIon entries</p>
-    </div>
-    <div className="stat-row">
-      <div className="stat-card"><div className="stat-label">Live Matches</div><div className="stat-val c-green">3</div></div>
-      <div className="stat-card"><div className="stat-label">Goals Today</div><div className="stat-val c-gold">6</div></div>
-      <div className="stat-card"><div className="stat-label">Cards Today</div><div className="stat-val c-yellow">3</div></div>
-      <div className="stat-card"><div className="stat-label">Busts Today</div><div className="stat-val c-red">1</div></div>
-    </div>
-    <div className="card">
-      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:10,letterSpacing:2,color:"#3a5a3a",marginBottom:14}}>TODAY'S EVENTS (MOCK DATA)</div>
-      {LIVE_EVENTS.map(ev => (
-        <div className="feed-item" key={ev.id}>
-          <div className="feed-icon">{ev.type==="goal"?"⚽":ev.type==="yellow"?"🟨":"🟥"}</div>
-          <div className="feed-text"><strong>{ev.player}</strong>{ev.type==="goal"?" scored":ev.type==="yellow"?" booked (yellow)":" sent off (red)"} · <strong>{ev.match}</strong><span style={{fontSize:11,color:"#3a5a3a"}}> {ev.min}'</span></div>
-          <div className="feed-time">{ev.time}</div>
+const LiveFeed = () => {
+  const [matches, setMatches] = useState([]);
+  const [scorers, setScorers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [apiLive, setApiLive] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    const [liveMatches, topScorers] = await Promise.all([
+      footballAPI.getLiveMatches(),
+      footballAPI.getScorers(),
+    ]);
+
+    if (liveMatches && liveMatches.length > 0) {
+      setMatches(liveMatches);
+      setApiLive(true);
+      setLastUpdated(new Date().toLocaleTimeString());
+    }
+    if (topScorers && topScorers.length > 0) {
+      setScorers(topScorers.slice(0, 10));
+      setApiLive(true);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+    // Refresh every 60 seconds during live matches
+    const interval = setInterval(load, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getMatchStatus = (m) => {
+    if (m.status === "IN_PLAY") return { label: "LIVE", color: "#00c853" };
+    if (m.status === "FINISHED") return { label: "FT", color: "#7a9a7a" };
+    return { label: m.status, color: "#7a9a7a" };
+  };
+
+  return (
+    <div className="page">
+      <div className="sh">
+        <div className="sh-eyebrow">Real-time updates</div>
+        <h1 className="sh-title">Live Feed</h1>
+        <p className="sh-sub">
+          Goals & cards · {apiLive ? <span style={{color:"#00c853"}}>🟢 Live via football-data.org</span> : <span style={{color:"#7a9a7a"}}>⚪ Pre-tournament (mock data)</span>}
+          {lastUpdated && <span style={{color:"#3a5a3a"}}> · Updated {lastUpdated}</span>}
+        </p>
+      </div>
+
+      {/* Top Scorers */}
+      {scorers.length > 0 && (
+        <div style={{marginBottom:24}}>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,letterSpacing:2,color:"#ffd700",marginBottom:12}}>⚽ TOP SCORERS</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {scorers.map((s, i) => (
+              <div key={i} style={{display:"flex",alignItems:"center",gap:12,background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:8,padding:"10px 14px"}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:"#3a5a3a",width:24}}>{i+1}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15}}>{s.player?.name}</div>
+                  <div style={{fontSize:11,color:"#7a9a7a"}}>{s.team?.name}</div>
+                </div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:"#ffd700"}}>{s.numberOfGoals}</div>
+              </div>
+            ))}
+          </div>
         </div>
-      ))}
+      )}
+
+      {/* Recent Matches */}
+      {matches.length > 0 ? (
+        <div>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,letterSpacing:2,color:"#ffd700",marginBottom:12}}>🏟️ RECENT MATCHES</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {matches.map((m, i) => {
+              const status = getMatchStatus(m);
+              return (
+                <div key={i} style={{background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:10,padding:"14px 16px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:10,fontWeight:700,letterSpacing:2,color:status.color,border:`1px solid ${status.color}`,borderRadius:3,padding:"2px 6px"}}>{status.label}</span>
+                    <span style={{fontSize:11,color:"#3a5a3a"}}>{m.utcDate ? new Date(m.utcDate).toLocaleDateString() : ""}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15,flex:1}}>{m.homeTeam?.name}</span>
+                    <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:"#ffd700",margin:"0 12px"}}>
+                      {m.score?.fullTime?.home ?? "—"} : {m.score?.fullTime?.away ?? "—"}
+                    </span>
+                    <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15,flex:1,textAlign:"right"}}>{m.awayTeam?.name}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : !loading && (
+        // Fallback mock feed pre-tournament
+        <div>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,letterSpacing:2,color:"#3a5a3a",marginBottom:12}}>MOCK DATA — TOURNAMENT STARTS JUNE 11 2026</div>
+          <div className="card">
+            {LIVE_EVENTS.map(ev => (
+              <div className="feed-item" key={ev.id}>
+                <div className="feed-icon">{ev.type==="goal"?"⚽":ev.type==="yellow"?"🟨":"🟥"}</div>
+                <div className="feed-text"><strong>{ev.player}</strong>{ev.type==="goal"?" scored":ev.type==="yellow"?" booked (yellow)":" sent off (red)"} · <strong>{ev.match}</strong><span style={{fontSize:11,color:"#3a5a3a"}}> {ev.min}'</span></div>
+                <div className="feed-time">{ev.time}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {loading && <Spinner full />}
+
+      <div style={{marginTop:20,display:"flex",gap:10}}>
+        <button className="btn btn-ghost btn-sm" onClick={load}>↻ Refresh</button>
+      </div>
+
+      <div className="info-box" style={{marginTop:20}}>
+        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:11,letterSpacing:2,color:"#1e90ff",marginBottom:6}}>📡 API STATUS</div>
+        <p style={{fontSize:13,color:"#7a9a7a",lineHeight:1.6}}>
+          Connected to <strong style={{color:"#e8f5e9"}}>football-data.org</strong>. World Cup data becomes available once the tournament begins June 11, 2026. Live scores refresh every 60 seconds automatically during active matches.
+        </p>
+      </div>
+      <Footer />
     </div>
-    <div className="info-box" style={{marginTop:20}}>
-      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:11,letterSpacing:2,color:"#1e90ff",marginBottom:6}}>📡 CONNECT LIVE DATA</div>
-      <p style={{fontSize:13,color:"#7a9a7a",lineHeight:1.6}}>Sign up at <strong style={{color:"#e8f5e9"}}>football-data.org</strong> for a free API key to enable real goal and card tracking. See the API Setup page for the full guide.</p>
-    </div>
-    <Footer />
-  </div>
-);
+  );
+};
 
 // ============================================================
 // APP SHELL

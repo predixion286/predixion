@@ -117,7 +117,7 @@ const sb = {
       const r = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY },
-        body: JSON.stringify({ email, password, options: { data: { username } } }),
+        body: JSON.stringify({ email, password, data: { username } }),
       });
       return r.json();
     },

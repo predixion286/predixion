@@ -2139,23 +2139,51 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [booting, setBooting] = useState(true);
 
-  // Restore session on load
+  // Restore session on load + handle confirmation email token in URL
   useEffect(() => {
-    const stored = session.get();
-    if (stored?.token) {
-      sb.auth.getUser(stored.token).then(u => {
-        if (u?.id) {
-          sb.select("users", `?id=eq.${u.id}`).then(rows => {
-            if (rows?.[0]) {
-              setAuth({ token: stored.token, user: rows[0] });
-              setPage("dashboard");
+    const boot = async () => {
+      // Check for Supabase auth token in URL hash (from confirmation email click)
+      const hash = window.location.hash;
+      if (hash && hash.includes("access_token")) {
+        const params = new URLSearchParams(hash.replace("#", ""));
+        const accessToken = params.get("access_token");
+        if (accessToken) {
+          try {
+            const u = await sb.auth.getUser(accessToken);
+            if (u?.id) {
+              const rows = await sb.select("users", `?id=eq.${u.id}`);
+              if (rows?.[0]) {
+                session.set({ token: accessToken });
+                setAuth({ token: accessToken, user: rows[0] });
+                setPage("dashboard");
+                // Clean the URL
+                window.history.replaceState(null, "", window.location.pathname);
+                setBooting(false);
+                return;
+              }
             }
-          });
+          } catch {}
         }
-      }).finally(() => setBooting(false));
-    } else {
-      setBooting(false);
-    }
+      }
+
+      // Otherwise restore existing session
+      const stored = session.get();
+      if (stored?.token) {
+        sb.auth.getUser(stored.token).then(u => {
+          if (u?.id) {
+            sb.select("users", `?id=eq.${u.id}`).then(rows => {
+              if (rows?.[0]) {
+                setAuth({ token: stored.token, user: rows[0] });
+                setPage("dashboard");
+              }
+            });
+          }
+        }).finally(() => setBooting(false));
+      } else {
+        setBooting(false);
+      }
+    };
+    boot();
   }, []);
 
   const nav = useCallback((p, params={}) => { setPage(p); setPageParams(params); }, []);

@@ -688,17 +688,20 @@ const AuthPage = ({ onAuth, initialMode = "login" }) => {
 const Dashboard = ({ auth, onNav, onToast }) => {
   const [groups, setGroups] = useState([]);
   const [entries, setEntries] = useState([]);
+  const [predictions, setPredictions] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [mems, ents] = await Promise.all([
+        const [mems, ents, preds] = await Promise.all([
           sb.select("group_members", `?user_id=eq.${auth.user.id}&select=group_id,groups(*)`),
           sb.select("entries", `?user_id=eq.${auth.user.id}`),
+          sb.select("predictions", `?user_id=eq.${auth.user.id}`),
         ]);
         setGroups((mems || []).map(m => m.groups).filter(Boolean));
         setEntries(ents || []);
+        setPredictions(preds?.[0] || null);
       } catch { onToast("Failed to load data", true); }
       setLoading(false);
     };
@@ -713,7 +716,10 @@ const Dashboard = ({ auth, onNav, onToast }) => {
     return { total, ...calcScore(total) };
   };
 
+  const goalsEntry = entries.find(e => e.type==="goals");
+  const cardsEntry = entries.find(e => e.type==="cards");
   const bestScore = entries.length ? Math.max(...entries.map(e => getDisplay(e).score)) : null;
+  const predCount = predictions ? Object.values(predictions).filter(v => v && typeof v === "string").length : 0;
 
   return (
     <div className="page">
@@ -723,6 +729,7 @@ const Dashboard = ({ auth, onNav, onToast }) => {
         <p className="sh-sub">World Cup 2026 · Kicks off June 11</p>
         <p className="sh-sub">Threshold: <strong style={{color:"#ffd700"}}>11</strong></p>
       </div>
+
       <div className="stat-row">
         <div className="stat-card"><div className="stat-label">My Groups</div><div className="stat-val c-gold">{groups.length}</div></div>
         <div className="stat-card"><div className="stat-label">Entries</div><div className="stat-val c-green">{entries.length}</div></div>
@@ -730,37 +737,99 @@ const Dashboard = ({ auth, onNav, onToast }) => {
         <div className="stat-card"><div className="stat-label">Best Score</div><div className="stat-val c-gold">{bestScore ?? "—"}</div></div>
       </div>
 
-      {entries.length > 0 && (
-        <>
-          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:17,letterSpacing:1,marginBottom:14}}>My Active Entries</div>
-          <div className="grid-2" style={{marginBottom:32}}>
-            {entries.map(entry => {
-              const { total, score, bust } = getDisplay(entry);
-              const group = groups.find(g => g.id===entry.group_id);
-              return (
-                <div key={entry.id} className="card" style={bust?{borderColor:"rgba(255,61,61,.3)"}:{}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                    <div>
-                      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:16}}>{entry.type==="goals"?"⚽ Goals XI":"🟨 Cards XI"}</div>
-                      <div style={{fontSize:11,color:"#7a9a7a"}}>{group?.name||"Unknown Group"}</div>
-                    </div>
-                    {bust ? <span className="bust-badge">💥 BUST</span> : <span className="alive-badge">ALIVE</span>}
+      {/* My XI Entries */}
+      <div style={{marginBottom:28}}>
+        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:17,letterSpacing:1,marginBottom:14}}>My XI Entries</div>
+        <div className="grid-2">
+          {/* Goals XI */}
+          <div className="card" style={goalsEntry && getDisplay(goalsEntry).bust ? {borderColor:"rgba(255,61,61,.3)"} : goalsEntry ? {borderColor:"rgba(0,200,83,.3)"} : {}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:16}}>⚽ Goals XI</div>
+              {goalsEntry
+                ? getDisplay(goalsEntry).bust
+                  ? <span className="bust-badge">💥 BUST</span>
+                  : <span className="alive-badge">ALIVE</span>
+                : <span style={{fontSize:11,color:"#ffd700",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:1}}>NOT PICKED</span>
+              }
+            </div>
+            {goalsEntry ? (
+              <>
+                <ProgressBar current={getDisplay(goalsEntry).total} />
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                  <span style={{fontSize:12,color:"#7a9a7a"}}>Formation: <strong style={{color:"#e8f5e9"}}>{goalsEntry.formation||"—"}</strong></span>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:getDisplay(goalsEntry).bust?"#ff3d3d":getDisplay(goalsEntry).score>=9.5?"#ffd700":"#00c853"}}>
+                    {getDisplay(goalsEntry).bust?"BUST":`${getDisplay(goalsEntry).score} pts`}
                   </div>
-                  <ProgressBar current={total} />
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-                    <span style={{fontSize:12,color:"#7a9a7a"}}>Threshold: <strong style={{color:"#ffd700"}}>11</strong></span>
-                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:bust?"#ff3d3d":score>=9.5?"#ffd700":"#00c853"}}>
-                      {bust?"BUST":`${score} pts`}
-                    </div>
-                  </div>
-                  <button className="btn btn-ghost btn-xs" style={{marginTop:8,width:"100%"}} onClick={() => onNav("xi-builder",{groupId:entry.group_id,type:entry.type})}>Edit XI</button>
                 </div>
-              );
-            })}
+                <button className="btn btn-ghost btn-xs" style={{marginTop:8,width:"100%"}} onClick={() => onNav("xi-builder",{type:"goals"})}>Edit Goals XI</button>
+              </>
+            ) : (
+              <button className="btn btn-primary" style={{width:"100%",marginTop:8}} onClick={() => onNav("xi-builder",{type:"goals"})}>+ Pick Goals XI</button>
+            )}
           </div>
-        </>
-      )}
 
+          {/* Cards XI */}
+          <div className="card" style={cardsEntry && getDisplay(cardsEntry).bust ? {borderColor:"rgba(255,61,61,.3)"} : cardsEntry ? {borderColor:"rgba(0,200,83,.3)"} : {}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:16}}>🟨 Cards XI</div>
+              {cardsEntry
+                ? getDisplay(cardsEntry).bust
+                  ? <span className="bust-badge">💥 BUST</span>
+                  : <span className="alive-badge">ALIVE</span>
+                : <span style={{fontSize:11,color:"#ffd700",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:1}}>NOT PICKED</span>
+              }
+            </div>
+            {cardsEntry ? (
+              <>
+                <ProgressBar current={getDisplay(cardsEntry).total} />
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                  <span style={{fontSize:12,color:"#7a9a7a"}}>Formation: <strong style={{color:"#e8f5e9"}}>{cardsEntry.formation||"—"}</strong></span>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:getDisplay(cardsEntry).bust?"#ff3d3d":getDisplay(cardsEntry).score>=9.5?"#ffd700":"#00c853"}}>
+                    {getDisplay(cardsEntry).bust?"BUST":`${getDisplay(cardsEntry).score} pts`}
+                  </div>
+                </div>
+                <button className="btn btn-ghost btn-xs" style={{marginTop:8,width:"100%"}} onClick={() => onNav("xi-builder",{type:"cards"})}>Edit Cards XI</button>
+              </>
+            ) : (
+              <button className="btn btn-primary" style={{width:"100%",marginTop:8}} onClick={() => onNav("xi-builder",{type:"cards"})}>+ Pick Cards XI</button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Predictions */}
+      <div style={{marginBottom:28}}>
+        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:17,letterSpacing:1,marginBottom:14}}>🎯 My Predictions</div>
+        <div className="card" style={predictions ? {borderColor:"rgba(0,200,83,.3)"} : {}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15}}>World Cup 2026 Predictions</div>
+              <div style={{fontSize:12,color:"#7a9a7a",marginTop:3}}>{predCount} / 10 answered · Max 60 pts</div>
+            </div>
+            {predictions
+              ? <button className="btn btn-ghost btn-sm" onClick={() => onNav("predictions")}>Edit</button>
+              : <button className="btn btn-gold btn-sm" onClick={() => onNav("predictions")}>+ Make Predictions</button>
+            }
+          </div>
+          {predictions && (
+            <div style={{marginTop:12,display:"flex",flexWrap:"wrap",gap:6}}>
+              {[
+                {icon:"🏆",label:"Winners",val:predictions.winners},
+                {icon:"🥈",label:"Runners-up",val:predictions.runners_up},
+                {icon:"⚽",label:"Top Scorer",val:predictions.top_scorer},
+                {icon:"🎯",label:"Assists",val:predictions.most_assists},
+                {icon:"🌟",label:"Golden Ball",val:predictions.golden_ball},
+              ].filter(p=>p.val).map(p => (
+                <div key={p.label} style={{background:"#122612",borderRadius:6,padding:"4px 10px",fontSize:12,color:"#7a9a7a"}}>
+                  {p.icon} <strong style={{color:"#e8f5e9"}}>{p.val}</strong>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Groups */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
         <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:17,letterSpacing:1}}>My Groups</div>
         <div style={{display:"flex",gap:8}}>
@@ -770,8 +839,8 @@ const Dashboard = ({ auth, onNav, onToast }) => {
       </div>
       {groups.length===0 ? (
         <div className="empty-state">
-          <div className="empty-icon">⚽</div>
-          <div className="empty-text">No groups yet</div>
+          <div className="empty-icon">👥</div>
+          <div className="empty-text">No groups yet — compete with friends!</div>
           <div style={{display:"flex",gap:10,justifyContent:"center"}}>
             <button className="btn btn-primary" onClick={() => onNav("groups",{modal:"create"})}>Create Group</button>
             <button className="btn btn-outline" onClick={() => onNav("groups",{modal:"join"})}>Join Group</button>
@@ -1817,13 +1886,14 @@ const LiveFeed = () => {
 };
 
 // ============================================================
-// XI BUILDER LOADER — proper component wrapper (fixes hooks-in-switch bug)
+// XI BUILDER LOADER — works with or without a group
 // ============================================================
 const XIBuilderLoader = ({ auth, groupId, type, onBack, onSave, onToast }) => {
   const [group, setGroup] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!groupId);
 
   useEffect(() => {
+    if (!groupId) { setLoading(false); return; }
     sb.select("groups", `?id=eq.${groupId}`)
       .then(rows => setGroup(rows?.[0] || null))
       .catch(() => onToast("Failed to load group", true))
@@ -1831,17 +1901,194 @@ const XIBuilderLoader = ({ auth, groupId, type, onBack, onSave, onToast }) => {
   }, [groupId]);
 
   if (loading) return <Spinner full />;
-  if (!group) return (
-    <div className="page">
-      <div className="empty-state">
-        <div className="empty-icon">⚠️</div>
-        <div className="empty-text">Group not found</div>
-        <button className="btn btn-ghost btn-sm" onClick={onBack}>← Go Back</button>
+
+  // No group needed — pass a dummy group object
+  const effectiveGroup = group || { id: null, name: "Global Entry" };
+  return <XIBuilder auth={auth} group={effectiveGroup} type={type} onBack={onBack} onSave={onSave} onToast={onToast} />;
+};
+
+// ============================================================
+// PREDICTIONS PAGE
+// ============================================================
+const NATIONS_LIST = [
+  "Argentina","Australia","Belgium","Bolivia","Brazil","Canada","Cameroon",
+  "Chile","Colombia","Costa Rica","Croatia","Curaçao","Denmark","Ecuador",
+  "Egypt","England","France","Germany","Ghana","Greece","Honduras","Iran",
+  "Iraq","Jamaica","Japan","Jordan","Kenya","Mexico","Morocco","Netherlands",
+  "New Zealand","Nigeria","Norway","Panama","Paraguay","Peru","Poland",
+  "Portugal","Saudi Arabia","Senegal","Serbia","Slovakia","Slovenia",
+  "South Korea","Spain","Switzerland","Turkey","Ukraine","Uruguay","USA","Uzbekistan",
+];
+
+const PRED_FIELDS = [
+  {id:"winners",icon:"🏆",label:"Winners",type:"nation",points:10},
+  {id:"runners_up",icon:"🥈",label:"Runners-up",type:"nation",points:6},
+  {id:"top_scorer",icon:"⚽",label:"Top Scorer",type:"player",points:8},
+  {id:"most_assists",icon:"🎯",label:"Most Assists",type:"player",points:6},
+  {id:"golden_ball",icon:"🌟",label:"Golden Ball",type:"player",points:6},
+  {id:"best_young_player",icon:"👶",label:"Best Young Player",type:"player",points:5},
+  {id:"golden_glove",icon:"🧤",label:"Golden Glove (GK)",type:"player",points:5},
+  {id:"flop",icon:"📉",label:"Flop of Tournament",type:"player",points:4},
+  {id:"disappointing_nation",icon:"😮",label:"Most Disappointing Nation",type:"nation",points:4},
+  {id:"dark_horse",icon:"🔥",label:"Dark Horse",type:"nation",points:6},
+];
+
+const PredictionsPage = ({ auth, onToast }) => {
+  const [form, setForm] = useState({});
+  const [searches, setSearches] = useState({});
+  const [allPlayers, setAllPlayers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [existing, setExisting] = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [preds, players] = await Promise.all([
+          sb.select("predictions", `?user_id=eq.${auth.user.id}`),
+          getSquads(),
+        ]);
+        if (preds?.[0]) { setExisting(preds[0]); setForm(preds[0]); }
+        setAllPlayers(players);
+      } catch {}
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const getPlayerSuggestions = (search, field) => {
+    if (!search || search.length < 2) return [];
+    // For golden glove only show GKs
+    const filtered = field.id === "golden_glove"
+      ? allPlayers.filter(p => p.posGroup === "GK")
+      : allPlayers;
+    return filtered.filter(p => p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 6);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const payload = { user_id: auth.user.id, ...form, updated_at: new Date().toISOString() };
+      if (existing) {
+        await sb.update("predictions", payload, `?user_id=eq.${auth.user.id}`, auth.token);
+      } else {
+        await sb.insert("predictions", payload, auth.token);
+      }
+      onToast("Predictions saved!");
+      setExisting(payload);
+    } catch { onToast("Failed to save — try again", true); }
+    setSaving(false);
+  };
+
+  const answered = PRED_FIELDS.filter(f => form[f.id]).length;
+  const maxPts = PRED_FIELDS.reduce((s,f) => s+f.points, 0);
+
+  if (loading) return <Spinner full />;
+
+  return (
+    <div className="page-narrow">
+      <div className="sh">
+        <div className="sh-eyebrow">World Cup 2026</div>
+        <h1 className="sh-title">My Predictions</h1>
+        <p className="sh-sub">{answered} / 10 answered · Up to <strong style={{color:"#ffd700"}}>{maxPts} pts</strong> · Locks June 11</p>
       </div>
+
+      <div className="warn-box" style={{marginBottom:20}}>
+        <div style={{fontSize:13,color:"#ffd700",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,letterSpacing:1,marginBottom:4}}>🗳️ COMMUNITY VOTE AWARDS</div>
+        <p style={{fontSize:12,color:"#7a9a7a",lineHeight:1.6}}>
+          Flop, Disappointing Nation and Dark Horse are decided by community vote from the semi-finals onwards.
+          Your prediction scores points if it matches the community vote winner.
+        </p>
+      </div>
+
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {PRED_FIELDS.map(field => {
+          const val = form[field.id] || "";
+          const search = searches[field.id] || "";
+          const suggestions = field.type === "player"
+            ? getPlayerSuggestions(search || val, field)
+            : [];
+          const isCommunity = ["flop","disappointing_nation","dark_horse"].includes(field.id);
+
+          return (
+            <div className="card" key={field.id}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:20}}>{field.icon}</span>
+                  <div>
+                    <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15}}>{field.label}</div>
+                    {isCommunity && <div style={{fontSize:10,color:"#7a9a7a",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:1}}>COMMUNITY VOTE</div>}
+                  </div>
+                </div>
+                <div style={{background:"rgba(255,215,0,.1)",border:"1px solid rgba(255,215,0,.25)",borderRadius:4,padding:"2px 9px",fontSize:12,color:"#ffd700",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700}}>
+                  +{field.points} pts
+                </div>
+              </div>
+
+              {field.type === "nation" ? (
+                <select
+                  className="form-select"
+                  value={val}
+                  onChange={e => setForm({...form,[field.id]:e.target.value})}
+                >
+                  <option value="">Select a nation...</option>
+                  {NATIONS_LIST.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              ) : (
+                <div style={{position:"relative"}}>
+                  <input
+                    className="form-input"
+                    placeholder="Type player name..."
+                    value={val}
+                    onChange={e => {
+                      setForm({...form,[field.id]:e.target.value});
+                      setSearches({...searches,[field.id]:e.target.value});
+                    }}
+                    autoComplete="off"
+                  />
+                  {suggestions.length > 0 && search.length >= 2 && (
+                    <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:"#0c210c",border:"1px solid #2a5a2a",borderRadius:6,overflow:"hidden",boxShadow:"0 4px 16px rgba(0,0,0,.5)"}}>
+                      {suggestions.map(p => (
+                        <div
+                          key={p.id}
+                          onClick={() => {
+                            setForm({...form,[field.id]:p.name});
+                            setSearches({...searches,[field.id]:""});
+                          }}
+                          style={{padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid #1a3a1a",transition:"background .15s"}}
+                          onMouseOver={e => { e.currentTarget.style.background="#122612"; }}
+                          onMouseOut={e => { e.currentTarget.style.background="transparent"; }}
+                        >
+                          <span>{FLAG_MAP[p.nation]||"🏳️"}</span>
+                          <div>
+                            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14}}>{p.name}</div>
+                            <div style={{fontSize:11,color:"#7a9a7a"}}>{p.nation}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {val && <div style={{marginTop:5,fontSize:12,color:"#00c853"}}>✓ {val}</div>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        className="btn btn-gold"
+        style={{width:"100%",padding:16,fontSize:15,gap:10,marginTop:20}}
+        onClick={save}
+        disabled={saving}
+      >
+        {saving && <Spinner />}
+        💾 Save Predictions
+      </button>
+      <p style={{textAlign:"center",fontSize:11,color:"#3a5a3a",marginTop:8}}>You can update until June 11, 2026 kickoff</p>
+      <Footer />
     </div>
   );
-
-  return <XIBuilder auth={auth} group={group} type={type} onBack={onBack} onSave={onSave} onToast={onToast} />;
 };
 
 // ============================================================
@@ -1891,6 +2138,7 @@ export default function App() {
 
   const navItems = [
     {id:"dashboard",label:"Dashboard"},
+    {id:"predictions",label:"Predictions"},
     {id:"groups",label:"Groups"},
     {id:"leaderboard",label:"Leaderboard"},
     {id:"feed",label:"Live Feed"},
@@ -1902,10 +2150,18 @@ export default function App() {
       case "landing": return <LandingPage onNav={nav} />;
       case "auth": return <AuthPage onAuth={handleAuth} initialMode={pageParams.mode||"login"} />;
       case "dashboard": return <Dashboard auth={auth} onNav={nav} onToast={onToast} />;
+      case "predictions": return <PredictionsPage auth={auth} onToast={onToast} />;
       case "groups": return <GroupsPage auth={auth} initialModal={pageParams.modal} onToast={onToast} onNav={nav} />;
       case "group-detail": return <GroupDetail auth={auth} groupId={pageParams.groupId} onNav={nav} onToast={onToast} />;
       case "xi-builder":
-        return <XIBuilderLoader auth={auth} groupId={pageParams.groupId} type={pageParams.type||"goals"} onBack={() => nav("group-detail",{groupId:pageParams.groupId})} onSave={() => nav("group-detail",{groupId:pageParams.groupId})} onToast={onToast} />;
+        return <XIBuilderLoader
+          auth={auth}
+          groupId={pageParams.groupId||null}
+          type={pageParams.type||"goals"}
+          onBack={() => pageParams.groupId ? nav("group-detail",{groupId:pageParams.groupId}) : nav("dashboard")}
+          onSave={() => pageParams.groupId ? nav("group-detail",{groupId:pageParams.groupId}) : nav("dashboard")}
+          onToast={onToast}
+        />;
       case "leaderboard": return <Leaderboard auth={auth} />;
       case "feed": return <LiveFeed />;
       default: return <Dashboard auth={auth} onNav={nav} onToast={onToast} />;

@@ -1065,6 +1065,37 @@ const FORMATIONS = {
     {id:"rwb",group:"MID",label:"RWB",row:2},{id:"cm1",group:"MID",label:"CM",row:2},{id:"cm2",group:"MID",label:"CM",row:2},{id:"cm3",group:"MID",label:"CM",row:2},{id:"lwb",group:"MID",label:"LWB",row:2},
     {id:"st1",group:"FWD",label:"ST",row:3},{id:"st2",group:"FWD",label:"ST",row:3},
   ],
+  "3-4-3": [
+    {id:"gk",group:"GK",label:"GK",row:0},
+    {id:"cb1",group:"DEF",label:"CB",row:1},{id:"cb2",group:"DEF",label:"CB",row:1},{id:"cb3",group:"DEF",label:"CB",row:1},
+    {id:"rm",group:"MID",label:"RM",row:2},{id:"cm1",group:"MID",label:"CM",row:2},{id:"cm2",group:"MID",label:"CM",row:2},{id:"lm",group:"MID",label:"LM",row:2},
+    {id:"rw",group:"FWD",label:"RW",row:3},{id:"st",group:"FWD",label:"ST",row:3},{id:"lw",group:"FWD",label:"LW",row:3},
+  ],
+  "4-5-1": [
+    {id:"gk",group:"GK",label:"GK",row:0},
+    {id:"rb",group:"DEF",label:"RB",row:1},{id:"cb1",group:"DEF",label:"CB",row:1},{id:"cb2",group:"DEF",label:"CB",row:1},{id:"lb",group:"DEF",label:"LB",row:1},
+    {id:"rm",group:"MID",label:"RM",row:2},{id:"cm1",group:"MID",label:"CM",row:2},{id:"cam",group:"MID",label:"CAM",row:2},{id:"cm2",group:"MID",label:"CM",row:2},{id:"lm",group:"MID",label:"LM",row:2},
+    {id:"st",group:"FWD",label:"ST",row:3},
+  ],
+  "5-3-2": [
+    {id:"gk",group:"GK",label:"GK",row:0},
+    {id:"rwb",group:"DEF",label:"RWB",row:1},{id:"cb1",group:"DEF",label:"CB",row:1},{id:"cb2",group:"DEF",label:"CB",row:1},{id:"cb3",group:"DEF",label:"CB",row:1},{id:"lwb",group:"DEF",label:"LWB",row:1},
+    {id:"cm1",group:"MID",label:"CM",row:2},{id:"cm2",group:"MID",label:"CM",row:2},{id:"cm3",group:"MID",label:"CM",row:2},
+    {id:"st1",group:"FWD",label:"ST",row:3},{id:"st2",group:"FWD",label:"ST",row:3},
+  ],
+  "5-4-1": [
+    {id:"gk",group:"GK",label:"GK",row:0},
+    {id:"rwb",group:"DEF",label:"RWB",row:1},{id:"cb1",group:"DEF",label:"CB",row:1},{id:"cb2",group:"DEF",label:"CB",row:1},{id:"cb3",group:"DEF",label:"CB",row:1},{id:"lwb",group:"DEF",label:"LWB",row:1},
+    {id:"rm",group:"MID",label:"RM",row:2},{id:"cm1",group:"MID",label:"CM",row:2},{id:"cm2",group:"MID",label:"CM",row:2},{id:"lm",group:"MID",label:"LM",row:2},
+    {id:"st",group:"FWD",label:"ST",row:3},
+  ],
+  "4-1-4-1": [
+    {id:"gk",group:"GK",label:"GK",row:0},
+    {id:"rb",group:"DEF",label:"RB",row:1},{id:"cb1",group:"DEF",label:"CB",row:1},{id:"cb2",group:"DEF",label:"CB",row:1},{id:"lb",group:"DEF",label:"LB",row:1},
+    {id:"cdm",group:"MID",label:"CDM",row:2},
+    {id:"rm",group:"MID",label:"RM",row:3},{id:"cm1",group:"MID",label:"CM",row:3},{id:"cm2",group:"MID",label:"CM",row:3},{id:"lm",group:"MID",label:"LM",row:3},
+    {id:"st",group:"FWD",label:"ST",row:4},
+  ],
 };
 
 // Cache squads in sessionStorage to save API calls
@@ -1247,7 +1278,7 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
         <h1 className="sh-title">Choose Formation</h1>
         <p className="sh-sub">Pick your tactical setup — you'll fill each slot with a real World Cup player</p>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
         {Object.keys(FORMATIONS).map(f => {
           const fSlots = FORMATIONS[f];
           const rows = [...new Set(fSlots.map(s=>s.row))];

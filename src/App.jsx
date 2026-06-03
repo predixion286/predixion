@@ -477,6 +477,8 @@ const css = `
   .tip-item{display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:#7a9a7a;}
   .tip-item span{color:#ffd700;}
   .footer-copy{font-size:11px;color:#3a5a3a;font-family:'Barlow Condensed',sans-serif;}
+
+  @keyframes floatBall{0%,100%{transform:translateY(0) rotate(0deg);}33%{transform:translateY(-14px) rotate(8deg);}66%{transform:translateY(-6px) rotate(-5deg);}}
 `;
 
 // ============================================================
@@ -547,20 +549,48 @@ const LandingPage = ({ onNav }) => (
   <div>
     <div className="hero">
       <div className="hero-bg" />
+
+      {/* Floating animated balls only */}
+      <div style={{position:"absolute",inset:0,overflow:"hidden",pointerEvents:"none"}}>
+        <div style={{position:"absolute",top:"8%",right:"8%",fontSize:28,opacity:.1,animation:"floatBall 7s ease-in-out infinite"}}>⚽</div>
+        <div style={{position:"absolute",top:"55%",left:"5%",fontSize:20,opacity:.07,animation:"floatBall 9s ease-in-out infinite reverse"}}>⚽</div>
+        <div style={{position:"absolute",top:"30%",right:"3%",fontSize:14,opacity:.05,animation:"floatBall 11s ease-in-out infinite 2s"}}>⚽</div>
+        <div style={{position:"absolute",bottom:"20%",left:"2%",fontSize:16,opacity:.06,animation:"floatBall 8s ease-in-out infinite 1s reverse"}}>⚽</div>
+      </div>
+
       <div className="hero-badge">🏆 FIFA WORLD CUP 2026 · USA / CANADA / MEXICO</div>
       <div className="hero-title"><span className="ht-green">PREDI</span><span className="ht-xi">XI</span><span className="ht-green">ON</span></div>
-      <p className="hero-sub">Pick your XI · Stay under eleven</p>
-      <p className="hero-desc">Select 11 players from the 2026 World Cup. Keep their combined goals — or cards — under <strong style={{color:"#ffd700"}}>11</strong>. Hit the threshold perfectly for maximum points. Go over and you're bust.</p>
+      <p className="hero-sub">Three games. One tournament. Who knows best?</p>
+      <p className="hero-desc">
+        Pick your Goals XI, your Cards XI, and make 10 bold predictions about the 2026 World Cup.
+        Stay under <strong style={{color:"#ffd700"}}>11</strong> on your XIs, nail your predictions, and top the leaderboard.
+      </p>
       <div className="hero-ctas">
         <button className="btn btn-primary" onClick={() => onNav("auth",{mode:"register"})}>Register to Play</button>
         <button className="btn btn-ghost" onClick={() => onNav("auth",{mode:"login"})}>Sign In</button>
       </div>
+
+      {/* Three competitions */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12,maxWidth:760,width:"100%",marginBottom:48}}>
+        {[
+          {icon:"⚽",title:"Goals XI",desc:"Pick 11 players. Keep their combined goals under 11. Closest to the threshold without busting wins.",color:"#00c853"},
+          {icon:"🟨",title:"Cards XI",desc:"Same mechanic, different chaos. Track card points — yellow=1, red=2. Stay under 11.",color:"#ffcc00"},
+          {icon:"🎯",title:"Predictions",desc:"Who wins it? Golden Boot? Golden Ball? 10 bold calls, up to 60 bonus points.",color:"#ffd700"},
+        ].map(c => (
+          <div key={c.title} style={{background:"rgba(12,33,12,.8)",border:`1px solid ${c.color}22`,borderRadius:12,padding:"20px 18px",textAlign:"left",backdropFilter:"blur(8px)"}}>
+            <div style={{fontSize:28,marginBottom:8}}>{c.icon}</div>
+            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:16,color:c.color,letterSpacing:1,marginBottom:6}}>{c.title}</div>
+            <p style={{fontSize:13,color:"#7a9a7a",lineHeight:1.6}}>{c.desc}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="how-grid">
         {[
-          {n:"01",t:"Register Free",d:"Create your account with email verification. No credit card ever needed."},
-          {n:"02",t:"Join or Create a Group",d:"Start a private group for your mates or join one with a 5-character invite code."},
-          {n:"03",t:"Pick Your XI",d:"One XI for Goals, another for Cards. Stay under 11 — the closer the better."},
-          {n:"04",t:"Win the League",d:"Closest to 11 without busting tops the board. Bonus points for special predictions."},
+          {n:"01",t:"Register Free",d:"Create your account in seconds. No credit card ever needed."},
+          {n:"02",t:"Pick Your XIs",d:"Choose a formation, fill each slot with a real World Cup player. One XI for Goals, one for Cards."},
+          {n:"03",t:"Make Predictions",d:"Winners, Golden Boot, Dark Horse, Flop — 10 calls, 60 points up for grabs."},
+          {n:"04",t:"Compete & Win",d:"Global leaderboard plus private groups. Three separate competitions, three chances to top the table."},
         ].map(h => (
           <div className="how-card" key={h.n}>
             <div className="how-num">{h.n}</div>
@@ -570,31 +600,83 @@ const LandingPage = ({ onNav }) => (
         ))}
       </div>
     </div>
-    <div style={{background:"#0c210c",borderTop:"1px solid #1a3a1a",borderBottom:"1px solid #1a3a1a",padding:"44px 28px",textAlign:"center"}}>
-      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:36,marginBottom:24}}>How Scoring Works</div>
-      <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
-        {[{v:"10 pts",l:"Exactly 11 — perfect",c:"c-gold"},{v:"9.5 pts",l:"10 goals/cards",c:"c-green"},{v:"6 pts",l:"5 goals/cards",c:"c-dim"},{v:"💥 BUST",l:"11 or over",c:"c-red"}].map(s => (
-          <div key={s.l} style={{background:"#122612",border:"1px solid #1a3a1a",borderRadius:10,padding:"16px 22px",minWidth:140,textAlign:"center"}}>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:30,marginBottom:4}} className={s.c}>{s.v}</div>
-            <div style={{fontSize:12,color:"#7a9a7a"}}>{s.l}</div>
-          </div>
-        ))}
+
+    {/* Scoring strip */}
+    <div style={{background:"#0c210c",borderTop:"1px solid #1a3a1a",borderBottom:"1px solid #1a3a1a",padding:"44px 28px"}}>
+      <div style={{maxWidth:960,margin:"0 auto"}}>
+        <div style={{textAlign:"center",marginBottom:28}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:36}}>How XI Scoring Works</div>
+          <p style={{color:"#7a9a7a",fontSize:14,marginTop:4}}>Same rules for Goals XI and Cards XI</p>
+        </div>
+        <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap",marginBottom:28}}>
+          {[
+            {v:"10 pts",l:"Exactly 11 — perfect",c:"c-gold"},
+            {v:"9.5 pts",l:"10 goals/cards",c:"c-green"},
+            {v:"6 pts",l:"5 goals/cards",c:"c-dim"},
+            {v:"💥 BUST",l:"11 or over",c:"c-red"},
+          ].map(s => (
+            <div key={s.l} style={{background:"#122612",border:"1px solid #1a3a1a",borderRadius:10,padding:"16px 22px",minWidth:140,textAlign:"center"}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:30,marginBottom:4}} className={s.c}>{s.v}</div>
+              <div style={{fontSize:12,color:"#7a9a7a"}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Predictions scoring */}
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28}}>Predictions Scoring</div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:8,maxWidth:760,margin:"0 auto"}}>
+          {[
+            {icon:"🏆",label:"Winners",pts:10},
+            {icon:"⚽",label:"Top Scorer",pts:8},
+            {icon:"🔥",label:"Dark Horse",pts:6},
+            {icon:"🌟",label:"Golden Ball",pts:6},
+            {icon:"🥈",label:"Runners-up",pts:6},
+            {icon:"🎯",label:"Most Assists",pts:6},
+            {icon:"👶",label:"Best Young Player",pts:5},
+            {icon:"🧤",label:"Golden Glove",pts:5},
+            {icon:"📉",label:"Flop",pts:4},
+            {icon:"😮",label:"Disappointing Nation",pts:4},
+          ].map(p => (
+            <div key={p.label} style={{background:"#122612",border:"1px solid #1a3a1a",borderRadius:8,padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:13,color:"#7a9a7a"}}>{p.icon} {p.label}</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:"#ffd700"}}>+{p.pts}</div>
+            </div>
+          ))}
+        </div>
+        <p style={{textAlign:"center",color:"#7a9a7a",fontSize:13,marginTop:16}}>
+          Plus community votes for <strong style={{color:"#e8f5e9"}}>Flop, Dark Horse & Disappointing Nation</strong> — decided by all players from the semi-finals
+        </p>
       </div>
     </div>
+
+    {/* Stats strip */}
     <div style={{padding:"44px 28px",textAlign:"center"}}>
-      <div style={{maxWidth:960,margin:"0 auto",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:28}}>
-        {[{v:"48",l:"Nations"},{v:"104",l:"Matches"},{v:"11",l:"The Threshold"},{v:"2",l:"Competitions"}].map(s => (
+      <div style={{maxWidth:960,margin:"0 auto",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:28}}>
+        {[
+          {v:"48",l:"Nations"},
+          {v:"104",l:"Matches"},
+          {v:"11",l:"The Threshold"},
+          {v:"3",l:"Competitions"},
+          {v:"60",l:"Max Prediction Pts"},
+        ].map(s => (
           <div key={s.l}>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:60,color:"#ffd700",lineHeight:1}}>{s.v}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:56,color:"#ffd700",lineHeight:1}}>{s.v}</div>
             <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:11,letterSpacing:2,textTransform:"uppercase",color:"#3a5a3a",marginTop:4}}>{s.l}</div>
           </div>
         ))}
       </div>
     </div>
-    <div style={{textAlign:"center",padding:"48px 28px 64px"}}>
+
+    {/* CTA */}
+    <div style={{textAlign:"center",padding:"48px 28px 64px",position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse 60% 60% at 50% 50%,rgba(0,200,83,.04) 0%,transparent 70%)",pointerEvents:"none"}} />
       <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:44,marginBottom:8}}>Ready to play?</div>
-      <p style={{color:"#7a9a7a",marginBottom:24,fontSize:15}}>Lock in your XI before June 11, 2026 kickoff.</p>
-      <button className="btn btn-gold" onClick={() => onNav("auth",{mode:"register"})}>Create Free Account</button>
+      <p style={{color:"#7a9a7a",marginBottom:24,fontSize:15}}>Lock in your picks before June 11, 2026 kickoff. Free forever.</p>
+      <button className="btn btn-gold" style={{fontSize:15,padding:"14px 36px"}} onClick={() => onNav("auth",{mode:"register"})}>
+        Create Free Account →
+      </button>
     </div>
     <Footer />
   </div>
@@ -1758,132 +1840,63 @@ const Leaderboard = ({ auth }) => {
 // ============================================================
 // LIVE FEED — powered by football-data.org
 // ============================================================
-const LiveFeed = () => {
-  const [matches, setMatches] = useState([]);
-  const [scorers, setScorers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [apiLive, setApiLive] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(null);
-
-  const load = async () => {
-    setLoading(true);
-    const [liveMatches, topScorers] = await Promise.all([
-      footballAPI.getLiveMatches(),
-      footballAPI.getScorers(),
-    ]);
-
-    if (liveMatches && liveMatches.length > 0) {
-      setMatches(liveMatches);
-      setApiLive(true);
-      setLastUpdated(new Date().toLocaleTimeString());
-    }
-    if (topScorers && topScorers.length > 0) {
-      setScorers(topScorers.slice(0, 10));
-      setApiLive(true);
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    load();
-    // Refresh every 60 seconds during live matches
-    const interval = setInterval(load, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const getMatchStatus = (m) => {
-    if (m.status === "IN_PLAY") return { label: "LIVE", color: "#00c853" };
-    if (m.status === "FINISHED") return { label: "FT", color: "#7a9a7a" };
-    return { label: m.status, color: "#7a9a7a" };
-  };
-
-  return (
-    <div className="page">
-      <div className="sh">
-        <div className="sh-eyebrow">Real-time updates</div>
-        <h1 className="sh-title">Live Feed</h1>
-        <p className="sh-sub">
-          Goals & cards · {apiLive ? <span style={{color:"#00c853"}}>🟢 Live via football-data.org</span> : <span style={{color:"#7a9a7a"}}>⚪ Pre-tournament (mock data)</span>}
-          {lastUpdated && <span style={{color:"#3a5a3a"}}> · Updated {lastUpdated}</span>}
-        </p>
-      </div>
-
-      {/* Top Scorers */}
-      {scorers.length > 0 && (
-        <div style={{marginBottom:24}}>
-          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,letterSpacing:2,color:"#ffd700",marginBottom:12}}>⚽ TOP SCORERS</div>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {scorers.map((s, i) => (
-              <div key={i} style={{display:"flex",alignItems:"center",gap:12,background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:8,padding:"10px 14px"}}>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:"#3a5a3a",width:24}}>{i+1}</div>
-                <div style={{flex:1}}>
-                  <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15}}>{s.player?.name}</div>
-                  <div style={{fontSize:11,color:"#7a9a7a"}}>{s.team?.name}</div>
-                </div>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:"#ffd700"}}>{s.numberOfGoals}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Recent Matches */}
-      {matches.length > 0 ? (
-        <div>
-          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,letterSpacing:2,color:"#ffd700",marginBottom:12}}>🏟️ RECENT MATCHES</div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {matches.map((m, i) => {
-              const status = getMatchStatus(m);
-              return (
-                <div key={i} style={{background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:10,padding:"14px 16px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:10,fontWeight:700,letterSpacing:2,color:status.color,border:`1px solid ${status.color}`,borderRadius:3,padding:"2px 6px"}}>{status.label}</span>
-                    <span style={{fontSize:11,color:"#3a5a3a"}}>{m.utcDate ? new Date(m.utcDate).toLocaleDateString() : ""}</span>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15,flex:1}}>{m.homeTeam?.name}</span>
-                    <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:"#ffd700",margin:"0 12px"}}>
-                      {m.score?.fullTime?.home ?? "—"} : {m.score?.fullTime?.away ?? "—"}
-                    </span>
-                    <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15,flex:1,textAlign:"right"}}>{m.awayTeam?.name}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : !loading && (
-        // Fallback mock feed pre-tournament
-        <div>
-          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,letterSpacing:2,color:"#3a5a3a",marginBottom:12}}>MOCK DATA — TOURNAMENT STARTS JUNE 11 2026</div>
-          <div className="card">
-            {LIVE_EVENTS.map(ev => (
-              <div className="feed-item" key={ev.id}>
-                <div className="feed-icon">{ev.type==="goal"?"⚽":ev.type==="yellow"?"🟨":"🟥"}</div>
-                <div className="feed-text"><strong>{ev.player}</strong>{ev.type==="goal"?" scored":ev.type==="yellow"?" booked (yellow)":" sent off (red)"} · <strong>{ev.match}</strong><span style={{fontSize:11,color:"#3a5a3a"}}> {ev.min}'</span></div>
-                <div className="feed-time">{ev.time}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {loading && <Spinner full />}
-
-      <div style={{marginTop:20,display:"flex",gap:10}}>
-        <button className="btn btn-ghost btn-sm" onClick={load}>↻ Refresh</button>
-      </div>
-
-      <div className="info-box" style={{marginTop:20}}>
-        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:11,letterSpacing:2,color:"#1e90ff",marginBottom:6}}>📡 API STATUS</div>
-        <p style={{fontSize:13,color:"#7a9a7a",lineHeight:1.6}}>
-          Connected to <strong style={{color:"#e8f5e9"}}>football-data.org</strong>. World Cup data becomes available once the tournament begins June 11, 2026. Live scores refresh every 60 seconds automatically during active matches.
-        </p>
-      </div>
-      <Footer />
+const LiveFeed = () => (
+  <div className="page">
+    <div className="sh">
+      <div className="sh-eyebrow">Real-time updates</div>
+      <h1 className="sh-title">Live Feed</h1>
+      <p className="sh-sub">Goals, cards & match events affecting your XI</p>
     </div>
-  );
-};
+
+    {/* Pre-tournament holding state */}
+    <div style={{
+      background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:16,
+      padding:"60px 40px",textAlign:"center",marginBottom:20,
+      position:"relative",overflow:"hidden",
+    }}>
+      {/* Subtle background pitch */}
+      <div style={{position:"absolute",inset:0,pointerEvents:"none",opacity:.4,
+        background:"repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,.015) 39px,rgba(255,255,255,.015) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,.015) 39px,rgba(255,255,255,.015) 40px)"
+      }} />
+      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:120,height:120,borderRadius:"50%",border:"1px solid rgba(255,255,255,.04)",pointerEvents:"none"}} />
+
+      <div style={{fontSize:56,marginBottom:16}}>📡</div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,letterSpacing:2,marginBottom:8}}>
+        Live Feed Starts June 11
+      </div>
+      <p style={{color:"#7a9a7a",fontSize:15,lineHeight:1.7,maxWidth:440,margin:"0 auto 24px"}}>
+        Once the tournament kicks off, this page will show real-time goals, cards, and match events — updating every 60 seconds and highlighting which affect your XI.
+      </p>
+
+      {/* Countdown-style info */}
+      <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+        {[
+          {icon:"⚽",label:"Goals scored"},
+          {icon:"🟨",label:"Cards issued"},
+          {icon:"💥",label:"Bust alerts"},
+          {icon:"🏆",label:"Score updates"},
+        ].map(item => (
+          <div key={item.label} style={{
+            background:"#122612",border:"1px solid #1a3a1a",borderRadius:8,
+            padding:"10px 16px",display:"flex",alignItems:"center",gap:8,
+          }}>
+            <span style={{fontSize:18}}>{item.icon}</span>
+            <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:700,color:"#7a9a7a",letterSpacing:.5}}>{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* API Status box */}
+    <div className="info-box">
+      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:11,letterSpacing:2,color:"#1e90ff",marginBottom:6}}>📡 API STATUS</div>
+      <p style={{fontSize:13,color:"#7a9a7a",lineHeight:1.6}}>
+        Connected to <strong style={{color:"#e8f5e9"}}>football-data.org</strong>. World Cup data activates from June 11, 2026. Live scores will refresh every 60 seconds automatically during active matches.
+      </p>
+    </div>
+    <Footer />
+  </div>
+);
 
 // ============================================================
 // XI BUILDER LOADER — works with or without a group

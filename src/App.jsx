@@ -252,14 +252,14 @@ const LIVE_EVENTS = [
 ];
 
 const GOAL_BONUS_QS = [
-  {id:"first_scorer",label:"First scorer of the 2026 World Cup",points:2},
-  {id:"golden_boot",label:"Golden Boot winner",points:2},
-  {id:"top_nation_goals",label:"Top scoring nation",points:1},
+  {id:"first_scorer",label:"First scorer of the 2026 World Cup",points:2,type:"player"},
+  {id:"golden_boot",label:"Golden Boot winner",points:1,type:"player"},
+  {id:"top_nation_goals",label:"Top scoring nation",points:1,type:"nation"},
 ];
 const CARD_BONUS_QS = [
-  {id:"first_yellow",label:"First yellow card of the 2026 World Cup",points:2},
-  {id:"first_red",label:"First red card of the 2026 World Cup",points:2},
-  {id:"most_carded_nation",label:"Most carded nation",points:1},
+  {id:"first_yellow",label:"First yellow card of the 2026 World Cup",points:2,type:"player"},
+  {id:"first_red",label:"First red card of the 2026 World Cup",points:1,type:"player"},
+  {id:"most_carded_nation",label:"Most carded nation",points:1,type:"nation"},
 ];
 
 // ============================================================
@@ -272,12 +272,16 @@ const session = {
 };
 
 // ============================================================
-// SCORING
+// SCORING — score = total (max 11), bust if >= THRESHOLD
 // ============================================================
 const calcScore = (total) => {
   if (total >= THRESHOLD) return { score: 0, bust: true };
-  return { score: parseFloat((10 - (THRESHOLD - total) * 0.5).toFixed(1)), bust: false };
+  return { score: total, bust: false };
 };
+// Accent-insensitive search — typing "Muller" finds "Müller"
+const normalize = (str) =>
+  (str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 const getEntryTotals = (entry) => {
   const players = PLAYERS.filter(p => (entry.xi || []).includes(p.id));
   return {
@@ -1372,7 +1376,7 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
     return allPlayers.filter(p => {
       const eligible = p.posGroup === slotGroup;
       const alreadyPicked = Object.values(slots).some(sp => sp && sp.id === p.id);
-      const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
+      const matchSearch = !search || normalize(p.name).includes(normalize(search));
       const matchNation = nationFilter === "ALL" || p.nation === nationFilter;
       return eligible && !alreadyPicked && matchSearch && matchNation;
     });
@@ -1633,12 +1637,13 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
       <div className="sh">
         <div className="sh-eyebrow">{type==="goals"?"Goals XI":"Cards XI"} · {group.name}</div>
         <h1 className="sh-title">Bonus Predictions</h1>
-        <p className="sh-sub">Up to +5 bonus points — pick from the actual World Cup squads</p>
+        <p className="sh-sub">Up to +4 bonus points · Max score 15 per competition</p>
       </div>
       {bonusQs.map(q => {
-        const searchVal = bonusSearch[q.id] || bonusAnswers[q.id] || "";
-        const suggestions = searchVal.length >= 2
-          ? allPlayers.filter(p => p.name.toLowerCase().includes(searchVal.toLowerCase())).slice(0, 8)
+        const searchVal = bonusSearch[q.id] || "";
+        const isNation = q.type === "nation";
+        const suggestions = !isNation && searchVal.length >= 2
+          ? allPlayers.filter(p => normalize(p.name).includes(normalize(searchVal))).slice(0, 8)
           : [];
         return (
           <div className="card" style={{marginBottom:12}} key={q.id}>
@@ -1646,50 +1651,70 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
               <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15,flex:1,marginRight:8}}>{q.label}</div>
               <div style={{background:"rgba(255,215,0,.1)",border:"1px solid rgba(255,215,0,.25)",borderRadius:4,padding:"2px 9px",fontSize:12,color:"#ffd700",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,flexShrink:0}}>+{q.points} pts</div>
             </div>
-            <div style={{position:"relative"}}>
-              <input
-                className="form-input"
-                placeholder="Type player name to search..."
-                value={bonusAnswers[q.id] || bonusSearch[q.id] || ""}
-                onChange={e => {
-                  setBonusSearch(prev => ({...prev,[q.id]:e.target.value}));
-                  setBonusAnswers(prev => ({...prev,[q.id]:e.target.value}));
-                }}
-                autoComplete="off"
-              />
-              {suggestions.length > 0 && (
-                <div style={{
-                  position:"absolute",top:"100%",left:0,right:0,zIndex:50,
-                  background:"#0c210c",border:"1px solid #2a5a2a",borderRadius:6,
-                  overflow:"hidden",boxShadow:"0 4px 16px rgba(0,0,0,.5)",
-                }}>
-                  {suggestions.map(p => (
-                    <div
-                      key={p.id}
-                      onClick={() => {
-                        setBonusAnswers(prev => ({...prev,[q.id]:p.name}));
-                        setBonusSearch(prev => ({...prev,[q.id]:""}));
-                      }}
-                      style={{
-                        padding:"10px 14px",cursor:"pointer",display:"flex",
-                        alignItems:"center",gap:10,borderBottom:"1px solid #1a3a1a",
-                        transition:"background .15s",
-                      }}
-                      onMouseOver={e => { e.currentTarget.style.background="#122612"; }}
-                      onMouseOut={e => { e.currentTarget.style.background="transparent"; }}
-                    >
-                      <span>{FLAG_MAP[p.nation]||"🏳"}</span>
-                      <div>
-                        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14}}>{p.name}</div>
-                        <div style={{fontSize:11,color:"#7a9a7a"}}>{p.nation}</div>
+            {isNation ? (
+              // Nation type — show dropdown
+              <select
+                className="form-select"
+                value={bonusAnswers[q.id]||""}
+                onChange={e => setBonusAnswers(prev => ({...prev,[q.id]:e.target.value}))}
+              >
+                <option value="">Select a nation...</option>
+                {NATIONS_LIST.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            ) : (
+              // Player type — searchable autocomplete
+              <div style={{position:"relative"}}>
+                <input
+                  className="form-input"
+                  placeholder="Type player name to search..."
+                  value={bonusAnswers[q.id] && !searchVal ? bonusAnswers[q.id] : searchVal}
+                  onChange={e => {
+                    setBonusSearch(prev => ({...prev,[q.id]:e.target.value}));
+                    if (!e.target.value) setBonusAnswers(prev => ({...prev,[q.id]:""}));
+                  }}
+                  autoComplete="off"
+                />
+                {suggestions.length > 0 && (
+                  <div style={{
+                    position:"absolute",top:"100%",left:0,right:0,zIndex:50,
+                    background:"#0c210c",border:"1px solid #2a5a2a",borderRadius:6,
+                    overflow:"hidden",boxShadow:"0 4px 16px rgba(0,0,0,.5)",
+                  }}>
+                    {suggestions.map(p => (
+                      <div
+                        key={p.id}
+                        onClick={() => {
+                          // Set answer and clear search — closes dropdown
+                          setBonusAnswers(prev => ({...prev,[q.id]:p.name}));
+                          setBonusSearch(prev => ({...prev,[q.id]:""}));
+                        }}
+                        style={{
+                          padding:"10px 14px",cursor:"pointer",display:"flex",
+                          alignItems:"center",gap:10,borderBottom:"1px solid #1a3a1a",
+                          transition:"background .15s",
+                        }}
+                        onMouseOver={e => { e.currentTarget.style.background="#122612"; }}
+                        onMouseOut={e => { e.currentTarget.style.background="transparent"; }}
+                      >
+                        <span>{FLAG_MAP[p.nation]||"🏳"}</span>
+                        <div>
+                          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14}}>{p.name}</div>
+                          <div style={{fontSize:11,color:"#7a9a7a"}}>{p.nation}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            {bonusAnswers[q.id] && !suggestions.length && (
-              <div style={{marginTop:6,fontSize:12,color:"#00c853"}}>✓ {bonusAnswers[q.id]}</div>
+                    ))}
+                  </div>
+                )}
+                {bonusAnswers[q.id] && !searchVal && (
+                  <div style={{marginTop:6,fontSize:12,color:"#00c853",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span>✓ {bonusAnswers[q.id]}</span>
+                    <button
+                      style={{background:"none",border:"none",color:"#3a5a3a",cursor:"pointer",fontSize:12,fontFamily:"'Barlow Condensed',sans-serif"}}
+                      onClick={() => { setBonusAnswers(prev => ({...prev,[q.id]:""})); setBonusSearch(prev => ({...prev,[q.id]:""})); }}
+                    >✕ Clear</button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         );
@@ -1975,7 +2000,7 @@ const PredictionsPage = ({ auth, onToast }) => {
     const filtered = field.id === "golden_glove"
       ? allPlayers.filter(p => p.posGroup === "GK")
       : allPlayers;
-    return filtered.filter(p => p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 6);
+    return filtered.filter(p => normalize(p.name).includes(normalize(search))).slice(0, 6);
   };
 
   const save = async () => {

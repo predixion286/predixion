@@ -1075,45 +1075,43 @@ const getSquads = async () => {
     return JSON.parse(cached);
   }
   try {
-    // First get all WC teams
-    const teamsRes = await fetch(`${AF_BASE}/teams?league=${WC_LEAGUE}&season=${WC_SEASON}`, {
-      headers: { "x-apisports-key": AF_KEY }
-    });
-    const teamsData = await teamsRes.json();
-    const teams = teamsData.response || [];
+    // Call our Vercel proxy (avoids CORS issues with football-data.org)
+    const r = await fetch("/api/squads");
+    if (!r.ok) throw new Error("Squad fetch failed");
+    const data = await r.json();
+    const teams = data.teams || [];
 
-    // Fetch squads for each team (batch to respect rate limits)
     const allPlayers = [];
-    for (const t of teams) {
-      try {
-        const squadRes = await fetch(`${AF_BASE}/players/squads?team=${t.team.id}`, {
-          headers: { "x-apisports-key": AF_KEY }
+    teams.forEach(team => {
+      const squad = team.squad || [];
+      squad.forEach(p => {
+        // Map football-data.org positions to our format
+        const posMap = {
+          "Goalkeeper": "GK",
+          "Defence": "DEF",
+          "Midfield": "MID",
+          "Offence": "FWD",
+        };
+        allPlayers.push({
+          id: p.id,
+          name: p.name,
+          pos: p.position || "MID",
+          posGroup: posMap[p.position] || "MID",
+          nation: team.name,
+          flag: FLAG_MAP[team.name] || "🏳️",
+          goals: 0,
+          cards: 0,
+          nationality: team.shortName || team.name,
         });
-        const squadData = await squadRes.json();
-        const players = squadData.response?.[0]?.players || [];
-        players.forEach(p => {
-          allPlayers.push({
-            id: p.id,
-            name: p.name,
-            pos: p.position, // Goalkeeper/Defender/Midfielder/Attacker
-            nation: t.team.name,
-            flag: t.team.name,
-            goals: 0,
-            cards: 0,
-            number: p.number,
-            photo: p.photo,
-          });
-        });
-        // Small delay to respect rate limits
-        await new Promise(r => setTimeout(r, 150));
-      } catch {}
-    }
+      });
+    });
 
     sessionStorage.setItem("px_squads_2026", JSON.stringify(allPlayers));
     sessionStorage.setItem("px_squads_time", Date.now().toString());
     return allPlayers;
-  } catch {
-    return PLAYERS; // Fall back to mock data
+  } catch (e) {
+    console.error("Squad fetch error:", e);
+    return [];
   }
 };
 
@@ -1189,10 +1187,8 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
 
   // Get eligible players for active slot
   const getEligible = (slotGroup) => {
-    const allowed = POS_GROUPS[slotGroup] || [];
     return allPlayers.filter(p => {
-      const pos = p.pos || "";
-      const eligible = allowed.some(a => pos.toLowerCase().includes(a.toLowerCase()));
+      const eligible = p.posGroup === slotGroup;
       const alreadyPicked = Object.values(slots).some(sp => sp && sp.id === p.id);
       const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
       const matchNation = nationFilter === "ALL" || p.nation === nationFilter;
@@ -1399,7 +1395,7 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
                   autoFocus
                 />
                 <select className="form-select" style={{marginBottom:10,padding:"8px 10px",fontSize:12}} value={nationFilter} onChange={e => setNationFilter(e.target.value)}>
-                  {nations.map(n => <option key={n} value={n}>{n==="ALL"?"All Nations":n}</option>)}
+                  {nations.map(n => <option key={n} value={n}>{n==="ALL"?"Nationality":n}</option>)}
                 </select>
                 <div style={{maxHeight:360,overflowY:"auto",display:"flex",flexDirection:"column",gap:6,paddingRight:4}}>
                   {getEligible(formationSlots.find(s=>s.id===activeSlot)?.group).slice(0,30).map(p => (

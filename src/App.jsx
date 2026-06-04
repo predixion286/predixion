@@ -483,6 +483,17 @@ const css = `
   .footer-copy{font-size:11px;color:#3a5a3a;font-family:'Barlow Condensed',sans-serif;}
 
   @keyframes floatBall{0%,100%{transform:translateY(0) rotate(0deg);}33%{transform:translateY(-14px) rotate(8deg);}66%{transform:translateY(-6px) rotate(-5deg);}}
+  @keyframes slideDrawer{from{transform:translateY(100%);}to{transform:translateY(0);}}
+
+  /* Responsive layout helpers */
+  .xi-desktop-only{display:grid;}
+  .xi-mobile-only{display:none;}
+  @media(max-width:768px){
+    .grid-2,.xi-builder-layout{grid-template-columns:1fr;}
+    .xi-panel{position:static;}
+    .xi-desktop-only{display:none !important;}
+    .xi-mobile-only{display:block !important;}
+  }
 `;
 
 // ============================================================
@@ -1478,6 +1489,115 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
   // ── STEP 2: PICK PLAYERS FOR EACH SLOT ──
   if (step === "pick") {
     const rows = [...new Set(formationSlots.map(s=>s.row))];
+    const activeSlotDef = formationSlots.find(s=>s.id===activeSlot);
+    const groupLabel = activeSlotDef?.group === "GK" ? "Goalkeepers" : activeSlotDef?.group === "DEF" ? "Defenders" : activeSlotDef?.group === "MID" ? "Midfielders" : "Forwards";
+    const eligiblePlayers = activeSlot ? getEligible(activeSlotDef?.group).slice(0, 50) : [];
+
+    // Shared pitch component used by both layouts
+    const PitchView = () => (
+      <div>
+        <div style={{
+          background:"linear-gradient(180deg,#071a07 0%,#0a2a0a 100%)",
+          border:"2px solid #1a3a1a",borderRadius:12,padding:"20px 12px",
+          position:"relative",minHeight:360,
+        }}>
+          <div style={{position:"absolute",top:"50%",left:"10%",right:"10%",height:1,background:"rgba(255,255,255,.06)"}} />
+          <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:60,height:60,borderRadius:"50%",border:"1px solid rgba(255,255,255,.06)"}} />
+          {rows.map(row => (
+            <div key={row} style={{display:"flex",justifyContent:"center",gap:8,marginBottom:16}}>
+              {formationSlots.filter(s=>s.row===row).map(slot => {
+                const player = slots[slot.id];
+                const isActive = activeSlot === slot.id;
+                return (
+                  <div
+                    key={slot.id}
+                    style={{textAlign:"center",cursor:"pointer",width:64}}
+                    onClick={() => { setActiveSlot(isActive ? null : slot.id); setSearch(""); setNationFilter("ALL"); }}
+                  >
+                    <div style={{
+                      width:52,height:52,borderRadius:"50%",margin:"0 auto 4px",
+                      background: player ? "rgba(0,200,83,.15)" : isActive ? "rgba(255,215,0,.15)" : "#122612",
+                      border: player ? "2px solid #00c853" : isActive ? "2px solid #ffd700" : "2px dashed #2a5a2a",
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      transition:"all .2s",position:"relative",
+                    }}
+                    onMouseOver={e => { if(player) e.currentTarget.style.borderColor="#ff3d3d"; }}
+                    onMouseOut={e => { if(player) e.currentTarget.style.borderColor="#00c853"; }}
+                    >
+                      {player ? (
+                        <>
+                          <span style={{fontSize:18}}>{FLAG_MAP[player.nation]||"🏳"}</span>
+                          <button
+                            onClick={e => { e.stopPropagation(); removePlayer(slot.id); }}
+                            style={{position:"absolute",top:-4,right:-4,width:16,height:16,borderRadius:"50%",background:"#ff3d3d",border:"none",color:"#fff",fontSize:9,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:"bold"}}
+                          >×</button>
+                        </>
+                      ) : (
+                        <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:10,fontWeight:700,color:isActive?"#ffd700":"#3a5a3a",letterSpacing:1}}>{slot.label}</span>
+                      )}
+                    </div>
+                    <div style={{fontSize:9,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:600,color:player?"#e8f5e9":"#3a5a3a",letterSpacing:0.3,maxWidth:64,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {player ? player.name.split(" ").pop() : slot.label}
+                    </div>
+                    {player && <div style={{fontSize:9,color:"#7a9a7a"}}>{type==="goals"?`⚽${player.goals||0}`:`🟨${player.cards||0}`}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        {selectedPlayers.length > 0 && (
+          <div style={{marginTop:10,background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:8,padding:"10px 14px"}}>
+            <ProgressBar current={total} />
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+              <span style={{fontSize:12,color:"#7a9a7a"}}>{selectedPlayers.length}/11 picked</span>
+              <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:bust?"#ff3d3d":score>=9?"#ffd700":"#00c853"}}>{bust?"💥 BUST":`${score} pts`}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+
+    // Shared player list used by both layouts
+    const PlayerList = ({ maxHeight }) => (
+      <div>
+        <input
+          className="form-input"
+          style={{marginBottom:8,padding:"10px 12px",fontSize:14}}
+          placeholder="Search by name..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          autoFocus
+        />
+        <select className="form-select" style={{marginBottom:10,padding:"8px 10px",fontSize:13}} value={nationFilter} onChange={e => setNationFilter(e.target.value)}>
+          {nations.map(n => <option key={n} value={n}>{n==="ALL"?"Nationality":n}</option>)}
+        </select>
+        <div style={{maxHeight:maxHeight||360,overflowY:"auto",display:"flex",flexDirection:"column",gap:8}}>
+          {eligiblePlayers.map(p => (
+            <div
+              key={p.id}
+              onClick={() => pickPlayer(p)}
+              style={{background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:10,padding:"12px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,transition:"all .15s"}}
+              onMouseOver={e => { e.currentTarget.style.borderColor="#00c853"; e.currentTarget.style.background="#122612"; }}
+              onMouseOut={e => { e.currentTarget.style.borderColor="#1a3a1a"; e.currentTarget.style.background="#0c210c"; }}
+            >
+              <span style={{fontSize:22}}>{FLAG_MAP[p.nation]||"🏳"}</span>
+              <div style={{flex:1}}>
+                <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15}}>{p.name}</div>
+                <div style={{fontSize:12,color:"#7a9a7a"}}>{p.nation}</div>
+              </div>
+              <div style={{fontSize:13,color:"#7a9a7a",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:600}}>
+                {type==="goals"?`⚽ ${p.goals||0}`:`🟨 ${p.cards||0}`}
+              </div>
+            </div>
+          ))}
+          {eligiblePlayers.length === 0 && (
+            <div style={{textAlign:"center",padding:"32px 0",color:"#3a5a3a",fontSize:14}}>No players found</div>
+          )}
+        </div>
+      </div>
+    );
+
     return (
       <div className="page">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
@@ -1488,143 +1608,121 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
 
         {loadingSquads && (
           <div style={{background:"rgba(255,215,0,.05)",border:"1px solid rgba(255,215,0,.2)",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#ffd700",display:"flex",gap:8,alignItems:"center"}}>
-            <Spinner /><span>Loading real World Cup squads...</span>
+            <Spinner /><span>Loading World Cup squads...</span>
           </div>
         )}
 
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,alignItems:"start"}}>
-          {/* Left: Pitch */}
-          <div>
-            <div style={{
-              background:"linear-gradient(180deg,#071a07 0%,#0a2a0a 100%)",
-              border:"2px solid #1a3a1a",borderRadius:12,padding:"20px 12px",
-              position:"relative",minHeight:380,
-            }}>
-              {/* Pitch markings */}
-              <div style={{position:"absolute",top:"50%",left:"10%",right:"10%",height:1,background:"rgba(255,255,255,.06)"}} />
-              <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:60,height:60,borderRadius:"50%",border:"1px solid rgba(255,255,255,.06)"}} />
-              {/* Slots by row — GK at top, consistent with formation picker */}
-              {rows.map(row => (
-                <div key={row} style={{display:"flex",justifyContent:"center",gap:8,marginBottom:16}}>
-                  {formationSlots.filter(s=>s.row===row).map(slot => {
-                    const player = slots[slot.id];
-                    const isActive = activeSlot === slot.id;
-                    return (
-                      <div
-                        key={slot.id}
-                        style={{textAlign:"center",cursor:"pointer",width:64}}
-                        onClick={() => { setActiveSlot(isActive ? null : slot.id); setSearch(""); setNationFilter("ALL"); }}
-                      >
-                        <div style={{
-                          width:52,height:52,borderRadius:"50%",margin:"0 auto 4px",
-                          background: player ? "rgba(0,200,83,.15)" : isActive ? "rgba(255,215,0,.15)" : "#122612",
-                          border: player ? "2px solid #00c853" : isActive ? "2px solid #ffd700" : "2px dashed #2a5a2a",
-                          display:"flex",alignItems:"center",justifyContent:"center",
-                          fontSize: player ? 20 : 16,
-                          transition:"all .2s",
-                          position:"relative",
-                        }}
-                        onMouseOver={e => { if(player) e.currentTarget.style.borderColor="#ff3d3d"; }}
-                        onMouseOut={e => { if(player) e.currentTarget.style.borderColor="#00c853"; }}
-                        >
-                          {player ? (
-                            <>
-                              <span style={{fontSize:18}}>{FLAG_MAP[player.nation]||"🏳"}</span>
-                              <button
-                                onClick={e => { e.stopPropagation(); removePlayer(slot.id); }}
-                                style={{position:"absolute",top:-4,right:-4,width:16,height:16,borderRadius:"50%",background:"#ff3d3d",border:"none",color:"#fff",fontSize:9,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:"bold"}}
-                              >×</button>
-                            </>
-                          ) : (
-                            <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:10,fontWeight:700,color:isActive?"#ffd700":"#3a5a3a",letterSpacing:1}}>{slot.label}</span>
-                          )}
-                        </div>
-                        <div style={{fontSize:9,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:600,color:player?"#e8f5e9":"#3a5a3a",letterSpacing:0.3,maxWidth:64,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                          {player ? player.name.split(" ").pop() : slot.label}
-                        </div>
-                        {player && (
-                          <div style={{fontSize:9,color:"#7a9a7a"}}>
-                            {type==="goals"?`⚽${player.goals||0}`:`🟨${player.cards||0}`}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-            {/* Score preview */}
-            {selectedPlayers.length > 0 && (
-              <div style={{marginTop:10,background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:8,padding:"10px 14px"}}>
-                <ProgressBar current={total} />
-                <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
-                  <span style={{fontSize:12,color:"#7a9a7a"}}>{selectedPlayers.length}/11 picked</span>
-                  <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:bust?"#ff3d3d":score>=9.5?"#ffd700":"#00c853"}}>{bust?"💥 BUST":`${score} pts`}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right: Player picker */}
-          <div>
-            {activeSlot ? (
-              <div>
-                <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:13,letterSpacing:1,color:"#ffd700",marginBottom:10}}>
-                  PICK: {formationSlots.find(s=>s.id===activeSlot)?.label} · {formationSlots.find(s=>s.id===activeSlot)?.group === "GK" ? "Goalkeepers" : formationSlots.find(s=>s.id===activeSlot)?.group === "DEF" ? "Defenders" : formationSlots.find(s=>s.id===activeSlot)?.group === "MID" ? "Midfielders" : "Forwards"}
-                </div>
-                <input
-                  className="form-input"
-                  style={{marginBottom:8,padding:"8px 12px",fontSize:13}}
-                  placeholder="Search by name..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  autoFocus
-                />
-                <select className="form-select" style={{marginBottom:10,padding:"8px 10px",fontSize:12}} value={nationFilter} onChange={e => setNationFilter(e.target.value)}>
-                  {nations.map(n => <option key={n} value={n}>{n==="ALL"?"Nationality":n}</option>)}
-                </select>
-                <div style={{maxHeight:360,overflowY:"auto",display:"flex",flexDirection:"column",gap:6,paddingRight:4}}>
-                  {getEligible(formationSlots.find(s=>s.id===activeSlot)?.group).slice(0,30).map(p => (
-                    <div
-                      key={p.id}
-                      onClick={() => pickPlayer(p)}
-                      style={{
-                        background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:8,
-                        padding:"10px 12px",cursor:"pointer",transition:"all .15s",
-                        display:"flex",alignItems:"center",gap:10,
-                      }}
-                      onMouseOver={e => { e.currentTarget.style.borderColor="#00c853"; }}
-                      onMouseOut={e => { e.currentTarget.style.borderColor="#1a3a1a"; }}
-                    >
-                      <span style={{fontSize:20}}>{FLAG_MAP[p.nation]||"🏳"}</span>
-                      <div style={{flex:1}}>
-                        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14}}>{p.name}</div>
-                        <div style={{fontSize:11,color:"#7a9a7a"}}>{p.nation}</div>
-                      </div>
-                      <div style={{fontSize:12,color:"#7a9a7a"}}>
-                        {type==="goals"?`⚽ ${p.goals||0}`:`🟨 ${p.cards||0}`}
-                      </div>
-                    </div>
-                  ))}
-                  {getEligible(formationSlots.find(s=>s.id===activeSlot)?.group).length === 0 && (
-                    <div style={{textAlign:"center",padding:"24px 0",color:"#3a5a3a",fontSize:13}}>No players found</div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div style={{textAlign:"center",padding:"48px 16px",color:"#3a5a3a"}}>
-                <div style={{fontSize:32,marginBottom:8}}>👆</div>
-                <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:15,letterSpacing:1}}>
-                  {allFilled ? "All slots filled! Hit Bonuses →" : "Tap a slot on the pitch to pick a player"}
-                </div>
-                {!allFilled && (
-                  <div style={{marginTop:16,fontSize:13,color:"#3a5a3a"}}>
-                    {formationSlots.filter(s=>!slots[s.id]).length} slots remaining
+        {/* ── DESKTOP LAYOUT — side by side ── */}
+        <div className="xi-desktop-only" style={{display:"grid",gridTemplateColumns:"1fr 270px",gap:20,alignItems:"start"}}>
+          <PitchView />
+          <div style={{position:"sticky",top:78}}>
+            <div className="card">
+              {activeSlot ? (
+                <>
+                  <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,letterSpacing:1.5,color:"#ffd700",marginBottom:12}}>
+                    PICK: {activeSlotDef?.label} · {groupLabel}
                   </div>
-                )}
-              </div>
-            )}
+                  <PlayerList maxHeight={400} />
+                </>
+              ) : (
+                <div style={{textAlign:"center",padding:"40px 16px",color:"#3a5a3a"}}>
+                  <div style={{fontSize:32,marginBottom:8}}>👆</div>
+                  <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,letterSpacing:1}}>
+                    {allFilled ? "All slots filled! Hit Bonuses →" : "Tap a slot on the pitch"}
+                  </div>
+                  {!allFilled && <div style={{marginTop:8,fontSize:12}}>{formationSlots.filter(s=>!slots[s.id]).length} slots remaining</div>}
+                </div>
+              )}
+            </div>
           </div>
+        </div>
+
+        {/* ── MOBILE LAYOUT — full width pitch + bottom drawer ── */}
+        <div className="xi-mobile-only">
+          <PitchView />
+
+          {!allFilled && !activeSlot && (
+            <div style={{textAlign:"center",padding:"16px 0 8px",color:"#3a5a3a",fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,letterSpacing:1}}>
+              TAP A SLOT TO PICK A PLAYER · {formationSlots.filter(s=>!slots[s.id]).length} REMAINING
+            </div>
+          )}
+          {allFilled && !activeSlot && (
+            <div style={{textAlign:"center",padding:"16px 0 8px",color:"#00c853",fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,letterSpacing:1}}>
+              ✓ ALL 11 PICKED · HIT BONUSES →
+            </div>
+          )}
+
+          {/* Bottom drawer overlay */}
+          {activeSlot && (
+            <>
+              {/* Backdrop */}
+              <div
+                onClick={() => { setActiveSlot(null); setSearch(""); setNationFilter("ALL"); }}
+                style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:200,backdropFilter:"blur(2px)"}}
+              />
+              {/* Drawer */}
+              <div style={{
+                position:"fixed",bottom:0,left:0,right:0,zIndex:201,
+                background:"#0c210c",
+                borderTop:"2px solid #2a5a2a",
+                borderRadius:"20px 20px 0 0",
+                padding:"0 0 24px",
+                maxHeight:"75vh",
+                display:"flex",flexDirection:"column",
+                animation:"slideDrawer .25s ease",
+              }}>
+                {/* Drag handle */}
+                <div style={{display:"flex",justifyContent:"center",padding:"12px 0 4px"}}>
+                  <div style={{width:40,height:4,borderRadius:2,background:"#2a5a2a"}} />
+                </div>
+                {/* Drawer header */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 20px 14px"}}>
+                  <div>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:1,color:"#ffd700"}}>{activeSlotDef?.label}</div>
+                    <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:12,color:"#7a9a7a",letterSpacing:1}}>{groupLabel}</div>
+                  </div>
+                  <button
+                    onClick={() => { setActiveSlot(null); setSearch(""); setNationFilter("ALL"); }}
+                    style={{background:"#122612",border:"1px solid #1a3a1a",borderRadius:"50%",width:32,height:32,color:"#7a9a7a",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+                  >✕</button>
+                </div>
+                {/* Player list — scrollable */}
+                <div style={{flex:1,overflowY:"auto",padding:"0 16px"}}>
+                  <input
+                    className="form-input"
+                    style={{marginBottom:8,padding:"12px 14px",fontSize:15}}
+                    placeholder="Search by name..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                  <select className="form-select" style={{marginBottom:12,padding:"10px 12px",fontSize:14}} value={nationFilter} onChange={e => setNationFilter(e.target.value)}>
+                    {nations.map(n => <option key={n} value={n}>{n==="ALL"?"Nationality":n}</option>)}
+                  </select>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {eligiblePlayers.map(p => (
+                      <div
+                        key={p.id}
+                        onClick={() => pickPlayer(p)}
+                        style={{background:"#122612",border:"1px solid #1a3a1a",borderRadius:12,padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,transition:"all .15s"}}
+                      >
+                        <span style={{fontSize:24}}>{FLAG_MAP[p.nation]||"🏳"}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:16}}>{p.name}</div>
+                          <div style={{fontSize:12,color:"#7a9a7a"}}>{p.nation}</div>
+                        </div>
+                        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:"#ffd700"}}>
+                          {type==="goals"?p.goals||0:p.cards||0}
+                        </div>
+                      </div>
+                    ))}
+                    {eligiblePlayers.length === 0 && (
+                      <div style={{textAlign:"center",padding:"32px 0",color:"#3a5a3a",fontSize:14}}>No players found</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );

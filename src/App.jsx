@@ -1093,14 +1093,21 @@ const GroupDetail = ({ auth, groupId, onNav, onToast }) => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [gs, mems, ents] = await Promise.all([
+        const [gs, mems] = await Promise.all([
           sb.select("groups", `?id=eq.${groupId}`),
           sb.select("group_members", `?group_id=eq.${groupId}&select=user_id,users(*)`),
-          sb.select("entries", `?group_id=eq.${groupId}`),
         ]);
         setGroup(gs?.[0]||null);
-        setMembers((mems||[]).map(m=>m.users).filter(Boolean));
-        setEntries(ents||[]);
+        const memberUsers = (mems||[]).map(m=>m.users).filter(Boolean);
+        setMembers(memberUsers);
+
+        // Fetch entries by member user IDs — not group_id
+        // since entries are global (group_id is null)
+        if (memberUsers.length > 0) {
+          const userIds = memberUsers.map(u => u.id).join(",");
+          const ents = await sb.select("entries", `?user_id=in.(${userIds})`);
+          setEntries(ents||[]);
+        }
       } catch { onToast("Failed to load group", true); }
       setLoading(false);
     };
@@ -1350,7 +1357,7 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
   useEffect(() => {
     const load = async () => {
       try {
-        const rows = await sb.select("entries", `?user_id=eq.${auth.user.id}&group_id=eq.${group.id}&type=eq.${type}`);
+        const rows = await sb.select("entries", `?user_id=eq.${auth.user.id}&type=eq.${type}`);
         if (rows?.length) {
           setExisting(rows[0]);
           setBonusAnswers(rows[0].bonus_answers || {});
@@ -1896,12 +1903,15 @@ const Leaderboard = ({ auth }) => {
     const load = async () => {
       setLoading(true);
       try {
-        const ents = await sb.select("entries", `?type=eq.${compTab}&select=*,users(*),groups(*)`);
+        const [ents, allUsers] = await Promise.all([
+          sb.select("entries", `?type=eq.${compTab}&select=*,users(*)`),
+          sb.select("users", ""),
+        ]);
         const rows = (ents||[]).map(entry => {
           const {goals,cards} = getEntryTotals(entry);
           const total = compTab==="goals" ? goals : cards;
           const {score,bust} = calcScore(total);
-          return {entry,user:entry.users,group:entry.groups,total,score,bust};
+          return {entry,user:entry.users,total,score,bust};
         }).sort((a,b) => {
           if (a.bust&&!b.bust) return 1;
           if (!a.bust&&b.bust) return -1;
@@ -1944,7 +1954,7 @@ const Leaderboard = ({ auth }) => {
                 <span className="lb-name">{r.user?.username||"Unknown"}</span>
                 {isMe&&<span style={{fontSize:10,color:"#ffd700",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:1}}>YOU</span>}
               </div>
-              <div className="lb-meta">{r.group?.name} · {r.total} / {THRESHOLD}</div>
+              <div className="lb-meta">{r.total} / {THRESHOLD}</div>
             </div>
             <div style={{textAlign:"right"}}>
               {r.bust

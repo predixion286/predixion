@@ -299,6 +299,18 @@ const getLiveStats = async () => {
 };
 
 const getEntryTotals = (entry, liveStats = {}) => {
+  // Use xi_names if available (new entries) — most accurate
+  const names = entry.xi_names ||
+    (entry.slot_names ? Object.values(entry.slot_names) : null);
+
+  if (names && names.length > 0 && Object.keys(liveStats).length > 0) {
+    return {
+      goals: names.reduce((s, name) => s + (liveStats[name]?.goals ?? 0), 0),
+      cards: names.reduce((s, name) => s + (liveStats[name]?.cards ?? 0), 0),
+    };
+  }
+
+  // Fallback: match by ID against mock PLAYERS array
   const players = PLAYERS.filter(p => (entry.xi || []).includes(p.id));
   return {
     goals: players.reduce((s, p) => s + (liveStats[p.name]?.goals ?? p.goals ?? 0), 0),
@@ -1457,9 +1469,11 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
         group_id: group.id,
         type,
         xi,
+        xi_names: selectedPlayers.map(p => p.name),
         bonus_answers: bonusAnswers,
         formation,
         slots: Object.fromEntries(Object.entries(slots).map(([k,v]) => [k, v?.id])),
+        slot_names: Object.fromEntries(Object.entries(slots).map(([k,v]) => [k, v?.name])),
       };
       if (existing) {
         await sb.update("entries", payload, `?id=eq.${existing.id}`, auth.token);

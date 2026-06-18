@@ -3,21 +3,25 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET");
 
   try {
-    // Fetch both in parallel — fault tolerant, one failing won't break the other
-    const [scorersResult, rostersResult] = await Promise.allSettled([
+    const [scorersResult, cardsResult] = await Promise.allSettled([
+      // Goals from football-data.org
       fetch(
         "https://api.football-data.org/v4/competitions/WC/scorers?season=2026",
         { headers: { "X-Auth-Token": "368a2224700a4ef9abca96eb9b8c4d9d" } }
       ).then(r => r.json()),
+      // Cards from Supabase (manually entered via admin panel)
       fetch(
-        "https://api.balldontlie.io/fifa/worldcup/v1/rosters?seasons[]=2026&per_page=200",
-        { headers: { "Authorization": "30302acf-095e-44e0-bee6-f5754cc26c94" } }
+        "https://etjullbcuyvefiqknhxk.supabase.co/rest/v1/card_events?select=player_name,card_type,points",
+        { headers: {
+          "apikey": "sb_publishable_66mUbfYgpIWK9a6L_Svczw_WNC1BXkD",
+          "Authorization": "Bearer sb_publishable_66mUbfYgpIWK9a6L_Svczw_WNC1BXkD"
+        }}
       ).then(r => r.json()),
     ]);
 
     const stats = {};
 
-    // Goals from football-data.org
+    // Goals
     if (scorersResult.status === "fulfilled") {
       (scorersResult.value.scorers || []).forEach(s => {
         if (s.player?.name) {
@@ -29,16 +33,12 @@ export default async function handler(req, res) {
       });
     }
 
-    // Cards from BallDontLie (yellow=1pt, red=2pts)
-    if (rostersResult.status === "fulfilled") {
-      (rostersResult.value.data || []).forEach(p => {
-        const name = p.player?.name;
-        if (!name) return;
-        const yellow = p.yellow_cards || 0;
-        const red = p.red_cards || 0;
-        const cardPoints = yellow + (red * 2);
-        if (!stats[name]) stats[name] = { goals: 0, cards: 0 };
-        stats[name].cards = cardPoints;
+    // Cards — aggregate from card_events table
+    if (cardsResult.status === "fulfilled") {
+      (cardsResult.value || []).forEach(c => {
+        if (!c.player_name) return;
+        if (!stats[c.player_name]) stats[c.player_name] = { goals: 0, cards: 0 };
+        stats[c.player_name].cards += c.points || 0;
       });
     }
 

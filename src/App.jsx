@@ -1361,9 +1361,9 @@ const FLAG_MAP = {
 // XI BUILDER — formation-based with real API squads
 // ============================================================
 const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
-  const [step, setStep] = useState("formation"); // formation → pick → bonus → review
+  const [step, setStep] = useState("formation");
   const [formation, setFormation] = useState(null);
-  const [slots, setSlots] = useState({}); // { slotId: player }
+  const [slots, setSlots] = useState({});
   const [activeSlot, setActiveSlot] = useState(null);
   const [bonusAnswers, setBonusAnswers] = useState({});
   const [saving, setSaving] = useState(false);
@@ -1374,29 +1374,37 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
   const [search, setSearch] = useState("");
   const [nationFilter, setNationFilter] = useState("ALL");
   const [bonusSearch, setBonusSearch] = useState({});
+  const [liveStats, setLiveStats] = useState({});
 
   const bonusQs = type === "goals" ? GOAL_BONUS_QS : CARD_BONUS_QS;
 
-  // Load existing entry
+  // Load existing entry + squads + live stats together
   useEffect(() => {
     const load = async () => {
       try {
-        const [rows, players] = await Promise.all([
+        const [rows, players, stats] = await Promise.all([
           sb.select("entries", `?user_id=eq.${auth.user.id}&type=eq.${type}`),
           getSquads(),
+          getLiveStats(),
         ]);
-        setAllPlayers(players);
+        // Merge live stats into players
+        const enrichedPlayers = players.map(p => ({
+          ...p,
+          goals: stats[p.name]?.goals ?? p.goals ?? 0,
+          cards: stats[p.name]?.cards ?? p.cards ?? 0,
+        }));
+        setAllPlayers(enrichedPlayers);
+        setLiveStats(stats);
         setLoadingSquads(false);
         if (rows?.length) {
           setExisting(rows[0]);
           setBonusAnswers(rows[0].bonus_answers || {});
           if (rows[0].formation) {
             setFormation(rows[0].formation);
-            // Restore slots — look up full player objects by ID
             const savedSlots = rows[0].slots || {};
             const restoredSlots = {};
             Object.entries(savedSlots).forEach(([slotId, playerId]) => {
-              const player = players.find(p => p.id === playerId || p.id === parseInt(playerId));
+              const player = enrichedPlayers.find(p => p.id === playerId || p.id === parseInt(playerId));
               if (player) restoredSlots[slotId] = player;
             });
             setSlots(restoredSlots);

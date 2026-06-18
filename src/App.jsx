@@ -282,11 +282,27 @@ const calcScore = (total) => {
 const normalize = (str) =>
   (str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-const getEntryTotals = (entry) => {
+// Live stats cache — fetches from /api/scorers proxy
+let liveStatsCache = null;
+let liveStatsCacheTime = 0;
+
+const getLiveStats = async () => {
+  if (liveStatsCache && Date.now() - liveStatsCacheTime < 300000) return liveStatsCache;
+  try {
+    const r = await fetch("/api/scorers");
+    if (!r.ok) return {};
+    const data = await r.json();
+    liveStatsCache = data.stats || {};
+    liveStatsCacheTime = Date.now();
+    return liveStatsCache;
+  } catch { return {}; }
+};
+
+const getEntryTotals = (entry, liveStats = {}) => {
   const players = PLAYERS.filter(p => (entry.xi || []).includes(p.id));
   return {
-    goals: players.reduce((s, p) => s + p.goals, 0),
-    cards: players.reduce((s, p) => s + p.cards, 0),
+    goals: players.reduce((s, p) => s + (liveStats[p.name]?.goals ?? p.goals ?? 0), 0),
+    cards: players.reduce((s, p) => s + (liveStats[p.name]?.cards ?? p.cards ?? 0), 0),
   };
 };
 const genCode = () => Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -786,19 +802,22 @@ const Dashboard = ({ auth, onNav, onToast }) => {
   const [groups, setGroups] = useState([]);
   const [entries, setEntries] = useState([]);
   const [predictions, setPredictions] = useState(null);
+  const [liveStats, setLiveStats] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [mems, ents, preds] = await Promise.all([
+        const [mems, ents, preds, stats] = await Promise.all([
           sb.select("group_members", `?user_id=eq.${auth.user.id}&select=group_id,groups(*)`),
           sb.select("entries", `?user_id=eq.${auth.user.id}`),
           sb.select("predictions", `?user_id=eq.${auth.user.id}`),
+          getLiveStats(),
         ]);
         setGroups((mems || []).map(m => m.groups).filter(Boolean));
         setEntries(ents || []);
         setPredictions(preds?.[0] || null);
+        setLiveStats(stats || {});
       } catch { onToast("Failed to load data", true); }
       setLoading(false);
     };
@@ -808,7 +827,7 @@ const Dashboard = ({ auth, onNav, onToast }) => {
   if (loading) return <Spinner full />;
 
   const getDisplay = (entry) => {
-    const { goals, cards } = getEntryTotals(entry);
+    const { goals, cards } = getEntryTotals(entry, liveStats);
     const total = entry.type==="goals" ? goals : cards;
     return { total, ...calcScore(total) };
   };
@@ -1088,6 +1107,7 @@ const GroupDetail = ({ auth, groupId, onNav, onToast }) => {
   const [group, setGroup] = useState(null);
   const [members, setMembers] = useState([]);
   const [entries, setEntries] = useState([]);
+  const [liveStats, setLiveStats] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1105,8 +1125,12 @@ const GroupDetail = ({ auth, groupId, onNav, onToast }) => {
         // since entries are global (group_id is null)
         if (memberUsers.length > 0) {
           const userIds = memberUsers.map(u => u.id).join(",");
-          const ents = await sb.select("entries", `?user_id=in.(${userIds})`);
+          const [ents, stats] = await Promise.all([
+            sb.select("entries", `?user_id=in.(${userIds})`),
+            getLiveStats(),
+          ]);
           setEntries(ents||[]);
+          setLiveStats(stats||{});
         }
       } catch { onToast("Failed to load group", true); }
       setLoading(false);
@@ -1122,7 +1146,7 @@ const GroupDetail = ({ auth, groupId, onNav, onToast }) => {
   const ranked = members.map(u => {
     const entry = entries.find(e => e.user_id===u.id && e.type===compTab);
     if (!entry) return { user:u, entry:null, total:0, score:0, bust:false };
-    const {goals,cards} = getEntryTotals(entry);
+    const {goals,cards} = getEntryTotals(entry, liveStats);
     const total = compTab==="goals" ? goals : cards;
     const {score,bust} = calcScore(total);
     return {user:u,entry,total,score,bust};
@@ -1357,30 +1381,32 @@ const XIBuilder = ({ auth, group, type, onSave, onBack, onToast }) => {
   useEffect(() => {
     const load = async () => {
       try {
-        const rows = await sb.select("entries", `?user_id=eq.${auth.user.id}&type=eq.${type}`);
+        const [rows, players] = await Promise.all([
+          sb.select("entries", `?user_id=eq.${auth.user.id}&type=eq.${type}`),
+          getSquads(),
+        ]);
+        setAllPlayers(players);
+        setLoadingSquads(false);
         if (rows?.length) {
           setExisting(rows[0]);
           setBonusAnswers(rows[0].bonus_answers || {});
-          // Restore formation and slots if saved
           if (rows[0].formation) {
             setFormation(rows[0].formation);
-            setSlots(rows[0].slots || {});
+            // Restore slots — look up full player objects by ID
+            const savedSlots = rows[0].slots || {};
+            const restoredSlots = {};
+            Object.entries(savedSlots).forEach(([slotId, playerId]) => {
+              const player = players.find(p => p.id === playerId || p.id === parseInt(playerId));
+              if (player) restoredSlots[slotId] = player;
+            });
+            setSlots(restoredSlots);
             setStep("pick");
           }
         }
-      } catch {}
+      } catch (e) { console.error("Load entry error:", e); }
       setLoadingEntry(false);
     };
     load();
-  }, []);
-
-  // Load real squads
-  useEffect(() => {
-    setLoadingSquads(true);
-    getSquads().then(players => {
-      setAllPlayers(players);
-      setLoadingSquads(false);
-    });
   }, []);
 
   const formationSlots = formation ? FORMATIONS[formation] : [];
@@ -1903,12 +1929,12 @@ const Leaderboard = ({ auth }) => {
     const load = async () => {
       setLoading(true);
       try {
-        const [ents, allUsers] = await Promise.all([
+        const [ents, stats] = await Promise.all([
           sb.select("entries", `?type=eq.${compTab}&select=*,users(*)`),
-          sb.select("users", ""),
+          getLiveStats(),
         ]);
         const rows = (ents||[]).map(entry => {
-          const {goals,cards} = getEntryTotals(entry);
+          const {goals,cards} = getEntryTotals(entry, stats);
           const total = compTab==="goals" ? goals : cards;
           const {score,bust} = calcScore(total);
           return {entry,user:entry.users,total,score,bust};

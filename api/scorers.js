@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     (data.scorers || []).forEach(s => {
       if (s.player?.name) {
         stats[s.player.name] = {
-          goals: s.numberOfGoals || 0,
+          goals: s.goals || s.numberOfGoals || 0,
           cards: 0,
         };
       }

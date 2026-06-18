@@ -2021,7 +2021,245 @@ const Leaderboard = ({ auth }) => {
 // ============================================================
 // LIVE FEED — powered by football-data.org
 // ============================================================
-const LiveFeed = () => (
+// ============================================================
+// ADMIN PANEL — only visible to Muntasir
+// ============================================================
+const ADMIN_USER_ID = "25de76c6-37a9-4877-896e-1287e8584b90";
+
+const AdminPanel = ({ auth, onToast }) => {
+  // Cards entry
+  const [cardPlayer, setCardPlayer] = useState("");
+  const [cardType, setCardType] = useState("yellow");
+  const [cardSearch, setCardSearch] = useState("");
+  const [allPlayers, setAllPlayers] = useState([]);
+  const [cardLog, setCardLog] = useState([]);
+  const [savingCard, setSavingCard] = useState(false);
+
+  // Tournament results
+  const [results, setResults] = useState({});
+  const [savingResults, setSavingResults] = useState(false);
+  const [existingResults, setExistingResults] = useState(null);
+
+  // Picks lock
+  const [picksLocked, setPicksLocked] = useState(false);
+  const [savingLock, setSavingLock] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [players, cards, res, settings] = await Promise.all([
+          getSquads(),
+          sb.select("card_events", "?order=created_at.desc"),
+          sb.select("tournament_results", ""),
+          sb.select("settings", "?key=eq.picks_locked"),
+        ]);
+        setAllPlayers(players);
+        setCardLog(cards || []);
+        if (res?.[0]) { setExistingResults(res[0]); setResults(res[0]); }
+        if (settings?.[0]) setPicksLocked(settings[0].value === "true");
+      } catch (e) { console.error(e); }
+    };
+    load();
+  }, []);
+
+  const playerSuggestions = cardSearch.length >= 2
+    ? allPlayers.filter(p => normalize(p.name).includes(normalize(cardSearch))).slice(0, 6)
+    : [];
+
+  const addCard = async () => {
+    if (!cardPlayer) return;
+    setSavingCard(true);
+    try {
+      await sb.insert("card_events", {
+        player_name: cardPlayer,
+        card_type: cardType,
+        points: cardType === "red" ? 2 : 1,
+      }, auth.token);
+      setCardLog(prev => [{ player_name: cardPlayer, card_type: cardType, points: cardType==="red"?2:1, created_at: new Date().toISOString() }, ...prev]);
+      setCardPlayer("");
+      setCardSearch("");
+      onToast(`${cardType === "red" ? "🟥" : "🟨"} ${cardPlayer} card added!`);
+    } catch { onToast("Failed to add card", true); }
+    setSavingCard(false);
+  };
+
+  const removeCard = async (id) => {
+    try {
+      await sb.delete("card_events", `?id=eq.${id}`, auth.token);
+      setCardLog(prev => prev.filter(c => c.id !== id));
+      onToast("Card removed");
+    } catch { onToast("Failed to remove", true); }
+  };
+
+  const saveResults = async () => {
+    setSavingResults(true);
+    try {
+      const payload = { ...results, updated_at: new Date().toISOString() };
+      if (existingResults) {
+        await sb.update("tournament_results", payload, `?id=eq.${existingResults.id}`, auth.token);
+      } else {
+        await sb.insert("tournament_results", payload, auth.token);
+      }
+      onToast("✅ Results saved!");
+      setExistingResults(payload);
+    } catch { onToast("Failed to save results", true); }
+    setSavingResults(false);
+  };
+
+  const toggleLock = async () => {
+    setSavingLock(true);
+    try {
+      const newVal = !picksLocked;
+      await sb.update("settings", { value: String(newVal), updated_at: new Date().toISOString() }, "?key=eq.picks_locked", auth.token);
+      setPicksLocked(newVal);
+      onToast(newVal ? "🔒 Picks locked!" : "🔓 Picks unlocked!");
+    } catch { onToast("Failed to toggle lock", true); }
+    setSavingLock(false);
+  };
+
+  const RESULT_FIELDS = [
+    {id:"winners",icon:"🏆",label:"Winners",type:"nation"},
+    {id:"runners_up",icon:"🥈",label:"Runners-up",type:"nation"},
+    {id:"top_scorer",icon:"⚽",label:"Top Scorer",type:"player"},
+    {id:"most_assists",icon:"🎯",label:"Most Assists",type:"player"},
+    {id:"golden_ball",icon:"🌟",label:"Golden Ball",type:"player"},
+    {id:"best_young_player",icon:"👶",label:"Best Young Player",type:"player"},
+    {id:"golden_glove",icon:"🧤",label:"Golden Glove",type:"player"},
+  ];
+
+  return (
+    <div className="page-narrow">
+      <div className="sh">
+        <div className="sh-eyebrow">Admin Only</div>
+        <h1 className="sh-title">⚙️ Admin Panel</h1>
+        <p className="sh-sub">Cards · Results · Pick Lock</p>
+      </div>
+
+      {/* ── PICKS LOCK ── */}
+      <div className="card" style={{marginBottom:20}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:16,marginBottom:4}}>
+              {picksLocked ? "🔒 Picks are LOCKED" : "🔓 Picks are OPEN"}
+            </div>
+            <div style={{fontSize:12,color:"#7a9a7a"}}>
+              {picksLocked ? "Users cannot edit their XI or predictions" : "Users can still edit their XI and predictions"}
+            </div>
+          </div>
+          <button
+            className={picksLocked ? "btn btn-ghost" : "btn btn-gold"}
+            onClick={toggleLock}
+            disabled={savingLock}
+            style={{flexShrink:0}}
+          >
+            {savingLock ? <Spinner /> : picksLocked ? "Unlock Picks" : "Lock Picks"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── CARD ENTRY ── */}
+      <div className="card" style={{marginBottom:20}}>
+        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:16,letterSpacing:1,marginBottom:16}}>
+          🟨 Add Card Event
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <button
+            className={`btn ${cardType==="yellow"?"btn-gold":"btn-ghost"}`}
+            style={{flex:1,fontSize:13}}
+            onClick={() => setCardType("yellow")}
+          >🟨 Yellow (+1)</button>
+          <button
+            className={`btn ${cardType==="red"?"btn-primary":"btn-ghost"}`}
+            style={{flex:1,fontSize:13,background:cardType==="red"?"#ff3d3d":undefined,color:cardType==="red"?"#fff":undefined}}
+            onClick={() => setCardType("red")}
+          >🟥 Red (+2)</button>
+        </div>
+
+        <div style={{position:"relative",marginBottom:10}}>
+          <input
+            className="form-input"
+            placeholder="Search player name..."
+            value={cardPlayer || cardSearch}
+            onChange={e => {
+              setCardSearch(e.target.value);
+              setCardPlayer("");
+            }}
+            autoComplete="off"
+          />
+          {playerSuggestions.length > 0 && !cardPlayer && (
+            <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:"#0c210c",border:"1px solid #2a5a2a",borderRadius:6,overflow:"hidden",boxShadow:"0 4px 16px rgba(0,0,0,.5)"}}>
+              {playerSuggestions.map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => { setCardPlayer(p.name); setCardSearch(""); }}
+                  style={{padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid #1a3a1a"}}
+                  onMouseOver={e => { e.currentTarget.style.background="#122612"; }}
+                  onMouseOut={e => { e.currentTarget.style.background="transparent"; }}
+                >
+                  <span>{FLAG_MAP[p.nation]||"🏳"}</span>
+                  <div>
+                    <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14}}>{p.name}</div>
+                    <div style={{fontSize:11,color:"#7a9a7a"}}>{p.nation}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {cardPlayer && <div style={{marginTop:5,fontSize:12,color:"#00c853"}}>✓ {cardPlayer}</div>}
+        </div>
+
+        <button className="btn btn-primary" style={{width:"100%"}} onClick={addCard} disabled={savingCard||!cardPlayer}>
+          {savingCard ? <Spinner /> : `Add ${cardType === "red" ? "🟥 Red" : "🟨 Yellow"} Card`}
+        </button>
+
+        {/* Card log */}
+        {cardLog.length > 0 && (
+          <div style={{marginTop:16}}>
+            <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:11,letterSpacing:2,color:"#3a5a3a",marginBottom:8}}>CARD LOG</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:240,overflowY:"auto"}}>
+              {cardLog.map((c,i) => (
+                <div key={c.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#122612",borderRadius:6,padding:"8px 12px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span>{c.card_type==="red"?"🟥":"🟨"}</span>
+                    <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14}}>{c.player_name}</span>
+                    <span style={{fontSize:11,color:"#ffd700"}}>+{c.points}pt</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:11,color:"#3a5a3a"}}>{new Date(c.created_at).toLocaleDateString()}</span>
+                    {c.id && <button onClick={() => removeCard(c.id)} style={{background:"none",border:"none",color:"#ff3d3d",cursor:"pointer",fontSize:14}}>×</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── TOURNAMENT RESULTS ── */}
+      <div className="card" style={{marginBottom:20}}>
+        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:16,letterSpacing:1,marginBottom:16}}>
+          🏆 Official Tournament Results
+        </div>
+        <p style={{fontSize:12,color:"#7a9a7a",marginBottom:16}}>Enter these after each award is officially announced — triggers predictions scoring automatically.</p>
+        {RESULT_FIELDS.map(f => (
+          <div key={f.id} style={{marginBottom:10}}>
+            <div style={{fontSize:12,color:"#7a9a7a",marginBottom:4,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:600}}>{f.icon} {f.label}</div>
+            <input
+              className="form-input"
+              placeholder={f.type==="nation"?"Nation name...":"Player name..."}
+              value={results[f.id]||""}
+              onChange={e => setResults(prev => ({...prev,[f.id]:e.target.value}))}
+            />
+          </div>
+        ))}
+        <button className="btn btn-gold" style={{width:"100%",marginTop:8}} onClick={saveResults} disabled={savingResults}>
+          {savingResults ? <Spinner /> : "💾 Save Results"}
+        </button>
+      </div>
+      <Footer />
+    </div>
+  );
+};
   <div className="page">
     <div className="sh">
       <div className="sh-eyebrow">Real-time updates</div>
@@ -2364,6 +2602,7 @@ export default function App() {
     {id:"groups",label:"Groups"},
     {id:"leaderboard",label:"Leaderboard"},
     {id:"feed",label:"Live Feed"},
+    ...(auth?.user?.id === ADMIN_USER_ID ? [{id:"admin",label:"⚙️ Admin"}] : []),
   ];
 
   const renderPage = () => {
@@ -2386,6 +2625,7 @@ export default function App() {
         />;
       case "leaderboard": return <Leaderboard auth={auth} />;
       case "feed": return <LiveFeed />;
+      case "admin": return auth?.user?.id === ADMIN_USER_ID ? <AdminPanel auth={auth} onToast={onToast} /> : <Dashboard auth={auth} onNav={nav} onToast={onToast} />;
       default: return <Dashboard auth={auth} onNav={nav} onToast={onToast} />;
     }
   };

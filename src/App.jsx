@@ -2260,57 +2260,38 @@ const AdminPanel = ({ auth, onToast }) => {
     </div>
   );
 };
+
+// ============================================================
+// LIVE FEED
+// ============================================================
+const LiveFeed = () => (
   <div className="page">
     <div className="sh">
       <div className="sh-eyebrow">Real-time updates</div>
       <h1 className="sh-title">Live Feed</h1>
       <p className="sh-sub">Goals, cards & match events affecting your XI</p>
     </div>
-
-    {/* Pre-tournament holding state */}
-    <div style={{
-      background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:16,
-      padding:"60px 40px",textAlign:"center",marginBottom:20,
-      position:"relative",overflow:"hidden",
-    }}>
-      {/* Subtle background pitch */}
-      <div style={{position:"absolute",inset:0,pointerEvents:"none",opacity:.4,
-        background:"repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,.015) 39px,rgba(255,255,255,.015) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,.015) 39px,rgba(255,255,255,.015) 40px)"
-      }} />
+    <div style={{background:"#0c210c",border:"1px solid #1a3a1a",borderRadius:16,padding:"60px 40px",textAlign:"center",marginBottom:20,position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",inset:0,pointerEvents:"none",opacity:.4,background:"repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,.015) 39px,rgba(255,255,255,.015) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,.015) 39px,rgba(255,255,255,.015) 40px)"}} />
       <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:120,height:120,borderRadius:"50%",border:"1px solid rgba(255,255,255,.04)",pointerEvents:"none"}} />
-
       <div style={{fontSize:56,marginBottom:16}}>📡</div>
-      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,letterSpacing:2,marginBottom:8}}>
-        Live Feed Starts June 11
-      </div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,letterSpacing:2,marginBottom:8}}>Live Feed Active</div>
       <p style={{color:"#7a9a7a",fontSize:15,lineHeight:1.7,maxWidth:440,margin:"0 auto 24px"}}>
-        Once the tournament kicks off, this page will show real-time goals, cards, and match events — updating every 60 seconds and highlighting which affect your XI.
+        Goals update automatically from football-data.org. Cards are updated manually after each matchday by the admin.
       </p>
-
-      {/* Countdown-style info */}
       <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
-        {[
-          {icon:"⚽",label:"Goals scored"},
-          {icon:"🟨",label:"Cards issued"},
-          {icon:"💥",label:"Bust alerts"},
-          {icon:"🏆",label:"Score updates"},
-        ].map(item => (
-          <div key={item.label} style={{
-            background:"#122612",border:"1px solid #1a3a1a",borderRadius:8,
-            padding:"10px 16px",display:"flex",alignItems:"center",gap:8,
-          }}>
+        {[{icon:"⚽",label:"Goals scored"},{icon:"🟨",label:"Cards issued"},{icon:"💥",label:"Bust alerts"},{icon:"🏆",label:"Score updates"}].map(item => (
+          <div key={item.label} style={{background:"#122612",border:"1px solid #1a3a1a",borderRadius:8,padding:"10px 16px",display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:18}}>{item.icon}</span>
             <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:700,color:"#7a9a7a",letterSpacing:.5}}>{item.label}</span>
           </div>
         ))}
       </div>
     </div>
-
-    {/* API Status box */}
     <div className="info-box">
       <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:11,letterSpacing:2,color:"#1e90ff",marginBottom:6}}>📡 API STATUS</div>
       <p style={{fontSize:13,color:"#7a9a7a",lineHeight:1.6}}>
-        Connected to <strong style={{color:"#e8f5e9"}}>football-data.org</strong>. World Cup data activates from June 11, 2026. Live scores will refresh every 60 seconds automatically during active matches.
+        Connected to <strong style={{color:"#e8f5e9"}}>football-data.org</strong>. Goals refresh every 5 minutes. Cards updated after each matchday.
       </p>
     </div>
     <Footer />
